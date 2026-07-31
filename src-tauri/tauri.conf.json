@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "carbon",
+  "productName": "Carbon",
   "version": "0.1.0",
   "identifier": "com.himanshu.carbon",
   "build": {
@@ -12,18 +12,42 @@
   "app": {
     "windows": [
       {
-        "title": "carbon",
-        "width": 800,
-        "height": 600
+        "label": "main",
+        "title": "Carbon",
+        "width": 390,
+        "height": 720,
+        "minWidth": 320,
+        "minHeight": 500,
+        "maxWidth": 540,
+        "center": true,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "alwaysOnTop": true,
+        "resizable": true
+      },
+      {
+        "label": "capture-toast",
+        "title": "Carbon notification",
+        "width": 260,
+        "height": 60,
+        "visible": false,
+        "focus": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
