@@ -1,5 +1,7 @@
 # Carbon - (ShadCN Copper for windows)
 
+just leave a star if you liked it.
+
 Carbon is a small Windows companion for capturing selected text, organizing
 prompts, and keeping follow-up work nearby. Everything is stored locally.
 
