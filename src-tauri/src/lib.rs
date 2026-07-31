@@ -139,8 +139,142 @@ fn reveal_data_file(app: AppHandle) -> Result<(), String> {
 }
 
 #[cfg(target_os = "windows")]
+fn focused_native_window() -> Result<windows::Win32::Foundation::HWND, String> {
+    use std::mem::size_of;
+    use windows::Win32::{
+        Foundation::HWND,
+        UI::WindowsAndMessaging::{
+            GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId, GUITHREADINFO,
+        },
+    };
+
+    unsafe {
+        let foreground = GetForegroundWindow();
+        if foreground == HWND::default() {
+            return Err("Windows did not report a foreground window.".to_string());
+        }
+        let thread_id = GetWindowThreadProcessId(foreground, None);
+        if thread_id == 0 {
+            return Ok(foreground);
+        }
+        let mut thread_info = GUITHREADINFO {
+            cbSize: size_of::<GUITHREADINFO>() as u32,
+            ..Default::default()
+        };
+        if GetGUIThreadInfo(thread_id, &mut thread_info).is_ok()
+            && thread_info.hwndFocus != HWND::default()
+        {
+            Ok(thread_info.hwndFocus)
+        } else {
+            Ok(foreground)
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn native_window_class(window: windows::Win32::Foundation::HWND) -> String {
+    use windows::Win32::UI::WindowsAndMessaging::GetClassNameW;
+
+    let mut class_name = [0u16; 128];
+    let length = unsafe { GetClassNameW(window, &mut class_name) };
+    (length > 0)
+        .then(|| String::from_utf16_lossy(&class_name[..length as usize]))
+        .unwrap_or_default()
+}
+
+#[cfg(target_os = "windows")]
+fn capture_win32_edit_selection() -> Result<Option<String>, String> {
+    use std::ffi::c_void;
+    use windows::{
+        core::w,
+        Win32::{
+            Foundation::{HWND, LPARAM, WPARAM},
+            UI::WindowsAndMessaging::{
+                FindWindowExW, GetWindowLongPtrW, SendMessageTimeoutW, ES_PASSWORD, GWL_STYLE,
+                SMTO_ABORTIFHUNG, SMTO_BLOCK, WM_GETTEXT, WM_GETTEXTLENGTH,
+            },
+        },
+    };
+
+    const EM_GETSEL: u32 = 0x00B0;
+    const MAX_EDIT_CHARACTERS: usize = 16 * 1024 * 1024;
+
+    unsafe fn message(
+        window: HWND,
+        message: u32,
+        wparam: usize,
+        lparam: isize,
+    ) -> Result<usize, String> {
+        let mut result = 0usize;
+        let sent = SendMessageTimeoutW(
+            window,
+            message,
+            WPARAM(wparam),
+            LPARAM(lparam),
+            SMTO_ABORTIFHUNG | SMTO_BLOCK,
+            700,
+            Some(&mut result),
+        );
+        (sent.0 != 0).then_some(result).ok_or_else(|| {
+            "The Win32 edit control did not answer the selection request.".to_string()
+        })
+    }
+
+    unsafe {
+        let mut editor = focused_native_window()?;
+        let mut class_name = native_window_class(editor);
+        if class_name.eq_ignore_ascii_case("ComboBox") {
+            if let Ok(child) = FindWindowExW(Some(editor), None, w!("Edit"), None) {
+                editor = child;
+                class_name = native_window_class(editor);
+            }
+        }
+
+        let lower_class = class_name.to_ascii_lowercase();
+        if lower_class != "edit" && !lower_class.starts_with("richedit") {
+            return Ok(None);
+        }
+        if GetWindowLongPtrW(editor, GWL_STYLE) & ES_PASSWORD as isize != 0 {
+            return Err("Carbon will not capture text from a password field.".to_string());
+        }
+
+        let mut selection_start = 0u32;
+        let mut selection_end = 0u32;
+        message(
+            editor,
+            EM_GETSEL,
+            (&mut selection_start as *mut u32) as usize,
+            (&mut selection_end as *mut u32) as isize,
+        )?;
+        if selection_start == selection_end {
+            return Ok(None);
+        }
+
+        let text_length = message(editor, WM_GETTEXTLENGTH, 0, 0)?;
+        if text_length == 0 || text_length > MAX_EDIT_CHARACTERS {
+            return Ok(None);
+        }
+        let mut buffer = vec![0u16; text_length + 1];
+        let copied = message(
+            editor,
+            WM_GETTEXT,
+            buffer.len(),
+            buffer.as_mut_ptr().cast::<c_void>() as isize,
+        )?;
+        buffer.truncate(copied.min(text_length));
+
+        let start = selection_start as usize;
+        let end = selection_end as usize;
+        if start >= end || end > buffer.len() {
+            return Ok(None);
+        }
+        Ok(Some(String::from_utf16_lossy(&buffer[start..end])))
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn capture_scintilla_selection() -> Result<Option<String>, String> {
-    use std::{ffi::c_void, mem::size_of, ptr::null};
+    use std::{ffi::c_void, ptr::null};
     use windows::Win32::{
         Foundation::{CloseHandle, HWND, LPARAM, WPARAM},
         System::{
@@ -151,8 +285,7 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
             Threading::{OpenProcess, PROCESS_VM_OPERATION, PROCESS_VM_READ},
         },
         UI::WindowsAndMessaging::{
-            GetClassNameW, GetForegroundWindow, GetGUIThreadInfo, GetWindowThreadProcessId,
-            SendMessageTimeoutW, GUITHREADINFO, SMTO_ABORTIFHUNG, SMTO_BLOCK,
+            GetWindowThreadProcessId, SendMessageTimeoutW, SMTO_ABORTIFHUNG, SMTO_BLOCK,
         },
     };
 
@@ -182,34 +315,9 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
     }
 
     unsafe {
-        let foreground = GetForegroundWindow();
-        if foreground == HWND::default() {
-            return Ok(None);
-        }
-
+        let editor = focused_native_window()?;
         let mut process_id = 0u32;
-        let thread_id = GetWindowThreadProcessId(foreground, Some(&mut process_id));
-        if thread_id == 0 {
-            return Ok(None);
-        }
-
-        let mut thread_info = GUITHREADINFO {
-            cbSize: size_of::<GUITHREADINFO>() as u32,
-            ..Default::default()
-        };
-        GetGUIThreadInfo(thread_id, &mut thread_info).map_err(io_error)?;
-        let editor = if thread_info.hwndFocus != HWND::default() {
-            thread_info.hwndFocus
-        } else {
-            foreground
-        };
-
-        let mut class_name = [0u16; 128];
-        let class_length = GetClassNameW(editor, &mut class_name);
-        if class_length <= 0
-            || !String::from_utf16_lossy(&class_name[..class_length as usize])
-                .eq_ignore_ascii_case("Scintilla")
-        {
+        if !native_window_class(editor).eq_ignore_ascii_case("Scintilla") {
             return Ok(None);
         }
 
@@ -338,6 +446,9 @@ fn capture_accessible_selection() -> Result<String, String> {
     }
 
     if let Some(text) = capture_scintilla_selection()? {
+        return Ok(text);
+    }
+    if let Some(text) = capture_win32_edit_selection()? {
         return Ok(text);
     }
 

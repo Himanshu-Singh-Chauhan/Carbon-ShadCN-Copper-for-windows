@@ -1,52 +1,65 @@
-# Carbon
+# Carbon - (ShadCN Copper for windows)
 
-Carbon is a small, keyboard-first Windows companion for capturing useful text,
-queuing prompts, and organizing follow-up work without sending your content to
-any service.
+Carbon is a small Windows companion for capturing selected text, organizing
+prompts, and keeping follow-up work nearby. Everything is stored locally.
 
-It is built with Tauri 2, React 19, TypeScript, Tailwind CSS, shadcn-style Radix
-primitives, Zustand, dnd-kit, and `fzf`.
+Built with Tauri 2, React, TypeScript, Tailwind CSS, Zustand, dnd-kit, and `fzf`.
 
-## What works
+## Features
 
-- Capture selected text from another Windows app with `Ctrl+Shift+C`
-- Create notes and multi-line prompts from the bottom composer
-- Type `# Section Name` to create and switch to a section
-- Switch sections and run actions with `Ctrl+K`
-- Fuzzy-search the current view using `fzf`
-- Check off, edit, delete, move, and drag notes
-- Multi-select notes and press `Ctrl+C` to copy them as one prompt block
-- Copy the current view as Markdown
-- Light, dark, and system themes
-- Always-on-top window, system tray, and remembered window bounds
-- Human-readable local JSON persistence with a user-selectable location
-- No accounts, models, telemetry, analytics, or note-content network requests
+- Global selected-text capture with `Ctrl+Shift+C`
+- UI Automation, Scintilla, and Win32 Edit/RichEdit capture providers
+- Sections, fuzzy search, drag ordering, completion, and multi-select copying
+- Command palette, system tray, always-on-top mode, and light/dark themes
+- Local JSON storage with no accounts, telemetry, or content network requests
+
+Capture does not send `Ctrl+C` or modify clipboard history. Some secure or
+custom-rendered applications may not expose their selection to Windows.
 
 ## Development
 
-Requirements:
-
-- Node.js 20 or newer
-- Rust stable
-- Tauri's Windows prerequisites (WebView2 and Microsoft C++ Build Tools)
+Requirements: Node.js 20+, Rust stable, WebView2, and Microsoft C++ Build Tools.
 
 ```powershell
 npm install
-npm run build
-cargo check --manifest-path src-tauri/Cargo.toml
-```
-
-To launch the Tauri development app yourself:
-
-```powershell
 npm run tauri dev
 ```
 
-To create Windows installers:
+Checks:
+
+```powershell
+npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml --check
+cargo check --manifest-path src-tauri/Cargo.toml
+```
+
+## Windows builds
+
+Build the executable without installers:
+
+```powershell
+npm run tauri build -- --no-bundle
+```
+
+Build both NSIS and MSI installers:
 
 ```powershell
 npm run tauri build
 ```
+
+Build one installer type:
+
+```powershell
+npm run tauri build -- --bundles nsis
+npm run tauri build -- --bundles msi
+```
+
+Outputs are written under `src-tauri/target/release/`.
+
+## Storage
+
+Carbon stores `carbon-data.json` in its app-data directory by default. The file
+location can be revealed or changed from Settings.
 
 ## Storage and privacy
 
@@ -90,15 +103,3 @@ example `CommandOrControl+Alt+C`.
 | `Enter` | Add composer text |
 | `Shift+Enter` | Add a line in the composer |
 | `Esc` | Clear selection / dismiss menus |
-
-## Project layout
-
-- `src/lib/model.ts` — persisted schema and migration-safe normalization
-- `src/lib/store.ts` — Carbon actions and UI state
-- `src/lib/native.ts` — typed Tauri bridge with browser-preview fallback
-- `src/components` — panel, command, settings, and shadcn-style UI primitives
-- `src-tauri/src/lib.rs` — storage, capture, tray, and native window commands
-
-Image/file attachments have deliberately not been added to the persistence
-schema yet. The document is versioned so attachment metadata can be introduced
-with a forward migration without breaking existing notes.
