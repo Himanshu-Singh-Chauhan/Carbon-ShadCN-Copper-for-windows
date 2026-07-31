@@ -7,6 +7,8 @@ prompts, and keeping follow-up work nearby. Everything is stored locally.
 
 Built with Tauri 2, React, TypeScript, Tailwind CSS, Zustand, dnd-kit, and `fzf`.
 
+![alt text](image.png)
+
 ## Features
 
 - Global selected-text capture with `Ctrl+Shift+C`
