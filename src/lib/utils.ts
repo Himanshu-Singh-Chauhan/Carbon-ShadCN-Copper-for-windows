@@ -14,10 +14,27 @@ export function createId(prefix = "id") {
 }
 
 export function formatShortcut(shortcut: string) {
+  const doublePressLabels: Record<string, string> = {
+    DoubleShift: "Shift Shift",
+    DoubleControl: "Ctrl Ctrl",
+    DoubleAlt: "Alt Alt",
+  };
+  if (doublePressLabels[shortcut]) return doublePressLabels[shortcut];
   return shortcut
     .replace("CommandOrControl", "Ctrl")
     .replace("CmdOrCtrl", "Ctrl")
     .replace(/\+/g, " + ");
+}
+
+export type DoublePressModifier = "shift" | "control" | "alt";
+
+export function doublePressModifier(
+  shortcut: string,
+): DoublePressModifier | null {
+  if (shortcut === "DoubleShift") return "shift";
+  if (shortcut === "DoubleControl") return "control";
+  if (shortcut === "DoubleAlt") return "alt";
+  return null;
 }
 
 export function isEditableTarget(target: EventTarget | null) {

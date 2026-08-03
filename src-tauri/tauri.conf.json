@@ -22,15 +22,15 @@
         "center": true,
         "decorations": false,
         "transparent": true,
-        "shadow": true,
+        "shadow": false,
         "alwaysOnTop": true,
         "resizable": true
       },
       {
         "label": "capture-toast",
         "title": "Carbon notification",
-        "width": 260,
-        "height": 60,
+        "width": 360,
+        "height": 520,
         "visible": false,
         "focus": false,
         "decorations": false,
@@ -39,10 +39,23 @@
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "resizable": false
+      },
+      {
+        "label": "image-viewer",
+        "title": "Carbon image",
+        "width": 1000,
+        "height": 700,
+        "minWidth": 520,
+        "minHeight": 360,
+        "visible": false,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": false,
+        "resizable": true
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
     }
   },
   "bundle": {

@@ -13,7 +13,7 @@ Built with Tauri 2, React, TypeScript, Tailwind CSS, Zustand, dnd-kit, and `fzf`
 
 - Global selected-text capture with `Ctrl+Shift+C`
 - UI Automation, Scintilla, and Win32 Edit/RichEdit capture providers
-- Sections, fuzzy search, drag ordering, completion, and multi-select copying
+- Buckets, fuzzy search, drag ordering, completion, and multi-select copying
 - Command palette, system tray, always-on-top mode, and light/dark themes
 - Local JSON storage with no accounts, telemetry, or content network requests
 
@@ -97,7 +97,7 @@ example `CommandOrControl+Alt+C`.
 | Shortcut | Action |
 | --- | --- |
 | `Ctrl+Shift+C` | Capture selected text globally |
-| `Ctrl+K` | Open command palette / switch section |
+| `Ctrl+K` | Open command palette / switch bucket |
 | `Ctrl+F` | Focus fuzzy search |
 | `Ctrl+,` | Open Settings |
 | `Ctrl+A` | Select all visible notes |

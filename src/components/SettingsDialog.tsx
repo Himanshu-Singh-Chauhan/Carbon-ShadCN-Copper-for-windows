@@ -1,9 +1,14 @@
-import { FolderOpen, Keyboard, Moon, Sun, Monitor } from "lucide-react";
-import { useEffect, useState } from "react";
+import {
+  FolderOpenIcon,
+  Moon02Icon,
+  Sun02Icon,
+} from "@hugeicons/core-free-icons";
 import type { CarbonSettings, Theme } from "../lib/model";
-import { formatShortcut } from "../lib/utils";
+import { cn } from "../lib/utils";
+import { ShortcutRecorder } from "./ShortcutRecorder";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
+import { Icon, type IconData } from "./ui/icon";
 import { Switch } from "./ui/switch";
 
 interface SettingsDialogProps {
@@ -16,11 +21,12 @@ interface SettingsDialogProps {
   onRevealData: () => void;
 }
 
-const themes: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: "system", label: "System", icon: Monitor },
-  { value: "light", label: "Light", icon: Sun },
-  { value: "dark", label: "Dark", icon: Moon },
+const themes: { value: Theme; label: string; icon: IconData }[] = [
+  { value: "light", label: "Light", icon: Sun02Icon },
+  { value: "dark", label: "Dark", icon: Moon02Icon },
 ];
+
+const sectionStyles = "p-3";
 
 export function SettingsDialog({
   open,
@@ -31,51 +37,53 @@ export function SettingsDialog({
   onChooseDataPath,
   onRevealData,
 }: SettingsDialogProps) {
-  const [hotkey, setHotkey] = useState(settings.captureHotkey);
-
-  useEffect(() => setHotkey(settings.captureHotkey), [settings.captureHotkey]);
-
-  function commitHotkey() {
-    const normalized = hotkey.trim().replace(/\s+/g, "");
-    if (normalized && normalized !== settings.captureHotkey) {
-      onUpdate({ captureHotkey: normalized });
-    } else {
-      setHotkey(settings.captureHotkey);
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        className="max-w-[366px]"
         title="Settings"
-        description="Carbon stays local and keeps out of your way."
+        description="Local, private, and out of your way."
       >
-        <div className="settings-stack">
-          <section className="settings-section">
-            <h3>Appearance</h3>
-            <div className="theme-picker" role="radiogroup" aria-label="Theme">
-              {themes.map(({ value, label, icon: Icon }) => (
+        <div className="min-w-0 divide-y divide-line overflow-hidden rounded-xl border border-line bg-surface">
+          <section className={sectionStyles}>
+            <h3 className="mb-2 text-sm font-semibold text-ink">Appearance</h3>
+            <div
+              className="grid min-w-0 grid-cols-[repeat(2,minmax(0,1fr))] gap-1 rounded-xl bg-surface-hover p-1"
+              role="radiogroup"
+              aria-label="Theme"
+            >
+              {themes.map(({ value, label, icon }) => (
                 <button
                   type="button"
                   role="radio"
                   aria-checked={settings.theme === value}
-                  className={
-                    settings.theme === value ? "theme-option active" : "theme-option"
-                  }
+                  className={cn(
+                    "inline-flex h-9 min-w-0 cursor-pointer items-center justify-center gap-1.5 overflow-hidden rounded-lg border text-sm font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent/35",
+                    settings.theme === value
+                      ? "border-line bg-surface-raised text-ink shadow-sm"
+                      : "border-transparent text-muted hover:text-ink",
+                  )}
                   key={value}
                   onClick={() => onUpdate({ theme: value })}
                 >
-                  <Icon size={15} />
-                  {label}
+                  <Icon className="shrink-0" icon={icon} size={15} />
+                  <span className="truncate">{label}</span>
                 </button>
               ))}
             </div>
           </section>
 
-          <section className="settings-section settings-row">
-            <div>
-              <h3>Always on top</h3>
-              <p>Keep Carbon visible over your current workspace.</p>
+          <section
+            className={cn(
+              sectionStyles,
+              "flex items-center justify-between gap-4",
+            )}
+          >
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-ink">Always on top</h3>
+              <p className="mt-0.5 text-xs leading-4 text-muted">
+                Keep Carbon above other windows.
+              </p>
             </div>
             <Switch
               checked={settings.alwaysOnTop}
@@ -84,42 +92,49 @@ export function SettingsDialog({
             />
           </section>
 
-          <section className="settings-section">
-            <div className="settings-label-row">
-              <div>
-                <h3>Capture shortcut</h3>
-                <p>Copies the current selection into the active section.</p>
-              </div>
-              <Keyboard size={17} />
-            </div>
-            <input
-              className="settings-input"
-              value={hotkey}
-              onChange={(event) => setHotkey(event.target.value)}
-              onBlur={commitHotkey}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.currentTarget.blur();
-                }
-              }}
-              aria-label="Capture shortcut"
+          <section className={sectionStyles}>
+            <h3 className="mb-3 text-sm font-semibold text-ink">
+              Keyboard shortcuts
+            </h3>
+            <ShortcutRecorder
+              label="Capture selection"
+              description="Save selected text without touching clipboard history."
+              value={settings.captureHotkey}
+              reservedValue={settings.showWindowHotkey}
+              reservedLabel="Show Carbon"
+              onChange={(captureHotkey) => onUpdate({ captureHotkey })}
             />
-            <span className="settings-hint">
-              Current: {formatShortcut(settings.captureHotkey)}
-            </span>
+            <div className="my-3 h-px bg-line" />
+            <ShortcutRecorder
+              label="Show Carbon"
+              description="Bring the main window to the front."
+              value={settings.showWindowHotkey}
+              reservedValue={settings.captureHotkey}
+              reservedLabel="Capture selection"
+              onChange={(showWindowHotkey) => onUpdate({ showWindowHotkey })}
+            />
           </section>
 
-          <section className="settings-section">
-            <div className="settings-label-row">
-              <div>
-                <h3>Local data file</h3>
-                <p className="data-path" title={dataPath}>
+          <section className={sectionStyles}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-ink">
+                  Local data file
+                </h3>
+                <p
+                  className="mt-0.5 truncate text-xs leading-4 text-muted"
+                  title={dataPath}
+                >
                   {dataPath}
                 </p>
               </div>
-              <FolderOpen size={17} />
+              <Icon
+                className="shrink-0 text-faint"
+                icon={FolderOpenIcon}
+                size={17}
+              />
             </div>
-            <div className="settings-actions">
+            <div className="mt-2 flex flex-wrap gap-2">
               <Button variant="outline" size="sm" onClick={onRevealData}>
                 Reveal
               </Button>
@@ -128,11 +143,11 @@ export function SettingsDialog({
               </Button>
             </div>
           </section>
+        </div>
 
-          <div className="privacy-note">
-            <span className="privacy-dot" />
-            No account, telemetry, analytics, or content network requests.
-          </div>
+        <div className="mt-3 flex min-w-0 items-start gap-2 px-1 text-xs leading-4 text-muted">
+          <span className="mt-1 size-1.5 shrink-0 rounded-full bg-accent" />
+          <span>No accounts, telemetry, analytics, or network storage.</span>
         </div>
       </DialogContent>
     </Dialog>

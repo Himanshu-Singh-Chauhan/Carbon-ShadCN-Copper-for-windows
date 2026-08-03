@@ -1,10 +1,19 @@
 import { createId } from "./utils";
 
-export type Theme = "system" | "light" | "dark";
+export type Theme = "light" | "dark";
+
+export interface CarbonAttachment {
+  id: string;
+  path: string;
+  mimeType: string;
+  width: number;
+  height: number;
+}
 
 export interface CarbonItem {
   id: string;
   text: string;
+  attachments: CarbonAttachment[];
   completed: boolean;
   createdAt: string;
   updatedAt: string;
@@ -27,11 +36,12 @@ export interface CarbonSettings {
   theme: Theme;
   alwaysOnTop: boolean;
   captureHotkey: string;
+  showWindowHotkey: string;
   windowBounds?: WindowBounds;
 }
 
 export interface CarbonDocument {
-  version: 1;
+  version: 2;
   activeSectionId: string;
   sections: CarbonSection[];
   settings: CarbonSettings;
@@ -42,13 +52,14 @@ export const ALL_SECTIONS = "all";
 export function createDefaultDocument(): CarbonDocument {
   const inboxId = createId("section");
   return {
-    version: 1,
+    version: 2,
     activeSectionId: ALL_SECTIONS,
     sections: [{ id: inboxId, name: "Inbox", items: [] }],
     settings: {
-      theme: "system",
+      theme: "light",
       alwaysOnTop: true,
       captureHotkey: "CommandOrControl+Shift+C",
+      showWindowHotkey: "CommandOrControl+Shift+Space",
     },
   };
 }
@@ -69,14 +80,32 @@ export function normalizeDocument(value: unknown): CarbonDocument {
             ),
         )
         .map((section) => ({
-          ...section,
+          id: section.id,
+          name: section.name,
           items: Array.isArray(section.items)
-            ? section.items.filter(
-                (item) =>
+            ? section.items
+                .filter(
+                  (item) =>
                   item &&
                   typeof item.id === "string" &&
                   typeof item.text === "string",
-              )
+                )
+                .map((item) => ({
+                  ...item,
+                  attachments: Array.isArray(item.attachments)
+                    ? item.attachments.filter(
+                        (attachment): attachment is CarbonAttachment =>
+                          Boolean(
+                            attachment &&
+                              typeof attachment.id === "string" &&
+                              typeof attachment.path === "string" &&
+                              typeof attachment.mimeType === "string" &&
+                              typeof attachment.width === "number" &&
+                              typeof attachment.height === "number",
+                          ),
+                      )
+                    : [],
+                }))
             : [],
         }))
     : fallback.sections;
@@ -90,12 +119,23 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       : ALL_SECTIONS;
 
   return {
-    version: 1,
+    version: 2,
     activeSectionId,
     sections,
     settings: {
       ...fallback.settings,
       ...(input.settings ?? {}),
+      theme: input.settings?.theme === "dark" ? "dark" : "light",
+      captureHotkey:
+        typeof input.settings?.captureHotkey === "string" &&
+        input.settings.captureHotkey.trim()
+          ? input.settings.captureHotkey
+          : fallback.settings.captureHotkey,
+      showWindowHotkey:
+        typeof input.settings?.showWindowHotkey === "string" &&
+        input.settings.showWindowHotkey.trim()
+          ? input.settings.showWindowHotkey
+          : fallback.settings.showWindowHotkey,
     },
   };
 }

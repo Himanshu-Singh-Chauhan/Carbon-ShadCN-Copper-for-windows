@@ -2,6 +2,7 @@ import { arrayMove } from "@dnd-kit/sortable";
 import { create } from "zustand";
 import {
   ALL_SECTIONS,
+  type CarbonAttachment,
   type CarbonDocument,
   type CarbonItem,
   type CarbonSettings,
@@ -13,14 +14,25 @@ interface CarbonState extends CarbonDocument {
   hydrated: boolean;
   selectedIds: string[];
   hydrate: (document: CarbonDocument) => void;
-  addEntry: (text: string) => void;
-  addItem: (text: string, sectionId?: string) => void;
+  addEntry: (
+    text: string,
+    attachments?: CarbonAttachment[],
+  ) => AddedItem | undefined;
+  addItem: (
+    text: string,
+    sectionId?: string,
+    attachments?: CarbonAttachment[],
+  ) => AddedItem | undefined;
   createSection: (name: string) => void;
   renameSection: (sectionId: string, name: string) => void;
   deleteSection: (sectionId: string) => void;
   setActiveSection: (sectionId: string) => void;
   toggleItem: (itemId: string) => void;
-  updateItem: (itemId: string, text: string) => void;
+  updateItem: (
+    itemId: string,
+    text: string,
+    attachments?: CarbonAttachment[],
+  ) => void;
   deleteItems: (ids?: string[]) => void;
   moveItems: (itemIds: string[], sectionId: string) => void;
   reorderItem: (sectionId: string, activeId: string, overId: string) => void;
@@ -28,6 +40,11 @@ interface CarbonState extends CarbonDocument {
   toggleSelected: (id: string) => void;
   clearSelected: () => void;
   updateSettings: (settings: Partial<CarbonSettings>) => void;
+}
+
+export interface AddedItem {
+  item: CarbonItem;
+  sectionId: string;
 }
 
 const initial = createDefaultDocument();
@@ -56,36 +73,37 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
   hydrate: (document) =>
     set({ ...document, hydrated: true, selectedIds: [] }),
 
-  addEntry: (rawText) => {
+  addEntry: (rawText, attachments = []) => {
     const text = rawText.trim();
-    if (!text) return;
-    if (/^#\s+/.test(text)) {
+    if (!text && attachments.length === 0) return;
+    if (attachments.length === 0 && /^#\s+/.test(text)) {
       get().createSection(text.replace(/^#\s+/, ""));
       return;
     }
-    get().addItem(text);
+    return get().addItem(text, undefined, attachments);
   },
 
-  addItem: (text, requestedSectionId) =>
-    set((state) => {
-      const sectionId = targetSectionId(state, requestedSectionId);
-      if (!sectionId) return state;
-      const now = new Date().toISOString();
-      const item: CarbonItem = {
-        id: createId("item"),
-        text: text.trim(),
-        completed: false,
-        createdAt: now,
-        updatedAt: now,
-      };
-      return {
-        sections: state.sections.map((section) =>
-          section.id === sectionId
-            ? { ...section, items: [...section.items, item] }
-            : section,
-        ),
-      };
-    }),
+  addItem: (text, requestedSectionId, attachments = []) => {
+    const sectionId = targetSectionId(get(), requestedSectionId);
+    if (!sectionId) return undefined;
+    const now = new Date().toISOString();
+    const item: CarbonItem = {
+      id: createId("item"),
+      text: text.trim(),
+      attachments,
+      completed: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    set((state) => ({
+      sections: state.sections.map((section) =>
+        section.id === sectionId
+          ? { ...section, items: [...section.items, item] }
+          : section,
+      ),
+    }));
+    return { item, sectionId };
+  },
 
   createSection: (rawName) =>
     set((state) => {
@@ -152,11 +170,16 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
       ),
     })),
 
-  updateItem: (itemId, text) =>
+  updateItem: (itemId, text, attachments) =>
     set((state) => ({
       sections: mapItems(state.sections, (item) =>
         item.id === itemId
-          ? { ...item, text: text.trim(), updatedAt: new Date().toISOString() }
+          ? {
+              ...item,
+              text: text.trim(),
+              attachments: attachments ?? item.attachments,
+              updatedAt: new Date().toISOString(),
+            }
           : item,
       ),
     })),
@@ -175,6 +198,9 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
 
   moveItems: (itemIds, destinationId) =>
     set((state) => {
+      if (!state.sections.some((section) => section.id === destinationId)) {
+        return state;
+      }
       const movingIds = new Set(itemIds);
       const moving = state.sections.flatMap((section) =>
         section.items.filter((item) => movingIds.has(item.id)),
@@ -223,7 +249,7 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
 export function getCarbonDocument(): CarbonDocument {
   const state = useCarbonStore.getState();
   return {
-    version: 1,
+    version: 2,
     activeSectionId: state.activeSectionId,
     sections: state.sections,
     settings: state.settings,

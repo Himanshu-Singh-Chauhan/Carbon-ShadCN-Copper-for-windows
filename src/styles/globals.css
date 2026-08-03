@@ -1,0 +1,137 @@
+@import "@fontsource-variable/geist";
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: "Geist Variable", "Segoe UI", sans-serif;
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --shadow-float: var(--shadow-float);
+  --shadow-panel: var(--shadow-panel);
+}
+
+:root {
+  --canvas: oklch(1 0 0);
+  --surface: oklch(0.97 0 0);
+  --surface-raised: oklch(1 0 0);
+  --surface-hover: oklch(0.95 0 0);
+  --ink: oklch(0.145 0 0);
+  --muted: oklch(0.45 0 0);
+  --faint: oklch(0.62 0 0);
+  --line: oklch(0.922 0 0);
+  --line-strong: oklch(0.84 0 0);
+  --accent: oklch(0.205 0 0);
+  --accent-strong: oklch(0.145 0 0);
+  --accent-soft: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --danger: oklch(0.577 0.245 27.325);
+  --danger-soft: oklch(0.97 0.015 25);
+  --shadow-float: 0 16px 40px rgb(0 0 0 / 0.14);
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 20px rgb(0 0 0 / 0.05);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --canvas: oklch(0.145 0 0);
+  --surface: oklch(0.205 0 0);
+  --surface-raised: oklch(0.205 0 0);
+  --surface-hover: oklch(0.269 0 0);
+  --ink: oklch(0.985 0 0);
+  --muted: oklch(0.708 0 0);
+  --faint: oklch(0.556 0 0);
+  --line: oklch(1 0 0 / 10%);
+  --line-strong: oklch(1 0 0 / 18%);
+  --accent: oklch(0.922 0 0);
+  --accent-strong: oklch(0.985 0 0);
+  --accent-soft: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --danger: oklch(0.704 0.191 22.216);
+  --danger-soft: oklch(0.269 0.035 25);
+  --shadow-float: 0 18px 50px rgb(0 0 0 / 0.5);
+  --shadow-panel: 0 1px 2px rgb(0 0 0 / 0.24), 0 8px 24px rgb(0 0 0 / 0.2);
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    box-sizing: border-box;
+    scrollbar-color: var(--line-strong) transparent;
+    scrollbar-width: thin;
+  }
+
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--line-strong);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-button,
+  *::-webkit-scrollbar-corner {
+    display: none;
+    background: transparent;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: transparent;
+    color: var(--ink);
+    font-family: "Geist Variable", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  button,
+  input,
+  textarea {
+    font: inherit;
+  }
+
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

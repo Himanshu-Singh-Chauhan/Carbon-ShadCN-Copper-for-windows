@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capabilities for Carbon windows",
-  "windows": ["main", "capture-toast"],
+  "windows": ["main", "capture-toast", "image-viewer"],
   "permissions": [
     "core:default",
     "core:window:allow-hide",

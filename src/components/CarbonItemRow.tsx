@@ -1,14 +1,18 @@
-import {
-  useSortable,
-} from "@dnd-kit/sortable";
+import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, GripVertical } from "lucide-react";
+import { CheckmarkCircle02Icon, Drag01Icon } from "@hugeicons/core-free-icons";
 import type { MouseEvent } from "react";
 import type { CarbonItem } from "../lib/model";
+import { extractHttpUrls, splitTextByLinks } from "../lib/links";
+import { openExternalUrl } from "../lib/native";
 import { cn } from "../lib/utils";
+import { AssetImage } from "./AssetImage";
+import { LinkPreviewCard } from "./LinkPreviewCard";
+import { Icon } from "./ui/icon";
 
 interface CarbonItemRowProps {
   item: CarbonItem;
+  focused: boolean;
   selected: boolean;
   searchQuery: string;
   dragDisabled: boolean;
@@ -16,6 +20,7 @@ interface CarbonItemRowProps {
   onSelect: (event: MouseEvent) => void;
   onContextMenu: (event: MouseEvent) => void;
   onEdit: () => void;
+  onOpenImage: (index: number) => void;
 }
 
 function HighlightedText({
@@ -32,7 +37,12 @@ function HighlightedText({
     <>
       {parts.map((part, index) =>
         part.toLowerCase() === query.trim().toLowerCase() ? (
-          <mark key={`${part}-${index}`}>{part}</mark>
+          <mark
+            className="rounded bg-accent-soft px-0.5 text-ink"
+            key={`${part}-${index}`}
+          >
+            {part}
+          </mark>
         ) : (
           part
         ),
@@ -41,8 +51,41 @@ function HighlightedText({
   );
 }
 
+function RichText({ text, query }: { text: string; query: string }) {
+  return (
+    <>
+      {splitTextByLinks(text).map((part, index) =>
+        part.kind === "link" ? (
+          <a
+            className="cursor-pointer text-accent underline decoration-accent/35 underline-offset-2 outline-none hover:decoration-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent/35"
+            href={part.value}
+            key={`${part.value}-${index}`}
+            rel="noreferrer"
+            target="_blank"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void openExternalUrl(part.value);
+            }}
+            onDoubleClick={(event) => event.stopPropagation()}
+          >
+            <HighlightedText text={part.value} query={query} />
+          </a>
+        ) : (
+          <HighlightedText
+            key={`${part.value}-${index}`}
+            text={part.value}
+            query={query}
+          />
+        ),
+      )}
+    </>
+  );
+}
+
 export function CarbonItemRow({
   item,
+  focused,
   selected,
   searchQuery,
   dragDisabled,
@@ -50,6 +93,7 @@ export function CarbonItemRow({
   onSelect,
   onContextMenu,
   onEdit,
+  onOpenImage,
 }: CarbonItemRowProps) {
   const {
     attributes,
@@ -59,6 +103,7 @@ export function CarbonItemRow({
     transition,
     isDragging,
   } = useSortable({ id: item.id, disabled: dragDisabled });
+  const previewUrl = extractHttpUrls(item.text)[0];
 
   return (
     <article
@@ -68,19 +113,30 @@ export function CarbonItemRow({
         transition,
       }}
       className={cn(
-        "note-card",
-        item.completed && "note-card--completed",
-        selected && "note-card--selected",
-        isDragging && "note-card--dragging",
+        "group relative flex cursor-default items-start gap-3 rounded-2xl border bg-surface-raised px-3 py-3 shadow-[0_1px_1px_rgb(0_0_0/0.025)] outline-none transition-[border-color,background-color,box-shadow,opacity,transform] duration-150",
+        "hover:shadow-panel",
+        selected
+          ? "border-accent/55 bg-accent-soft ring-1 ring-accent/20 hover:border-accent/55"
+          : focused
+            ? "border-line-strong bg-surface-hover ring-1 ring-line-strong/30 hover:border-line-strong"
+            : "border-line hover:border-line-strong",
+        item.completed && "opacity-60",
+        isDragging && "z-20 scale-[1.015] opacity-90 shadow-float",
       )}
       onClick={onSelect}
       onContextMenu={onContextMenu}
       onDoubleClick={onEdit}
       data-item-id={item.id}
+      data-note-card
     >
       <button
         type="button"
-        className={cn("check-button", item.completed && "check-button--checked")}
+        className={cn(
+          "mt-0.5 inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/35",
+          item.completed
+            ? "border-accent bg-accent text-accent-foreground"
+            : "border-line-strong bg-surface hover:border-accent hover:bg-accent-soft",
+        )}
         aria-label={item.completed ? "Mark as not done" : "Mark as done"}
         aria-pressed={item.completed}
         onClick={(event) => {
@@ -88,21 +144,72 @@ export function CarbonItemRow({
           onToggle();
         }}
       >
-        {item.completed && <Check size={13} strokeWidth={3} />}
+        {item.completed && (
+          <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.6} />
+        )}
       </button>
-      <p className="note-text">
-        <HighlightedText text={item.text} query={searchQuery} />
-      </p>
+      <div className="min-w-0 flex-1">
+        {item.attachments.length > 0 && (
+          <div
+            className={cn(
+              "mb-2 grid max-h-64 gap-1.5 overflow-hidden rounded-xl",
+              item.attachments.length === 1 && "grid-cols-1",
+              item.attachments.length === 2 && "grid-cols-2",
+              item.attachments.length >= 3 && "grid-cols-2",
+            )}
+          >
+            {item.attachments.map((attachment, index) => (
+              <button
+                type="button"
+                className={cn(
+                  "min-h-20 cursor-zoom-in overflow-hidden bg-surface-hover outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                  item.attachments.length === 1 && "max-h-56",
+                  item.attachments.length === 3 && index === 0 && "row-span-2",
+                )}
+                key={attachment.id}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (event.ctrlKey || event.metaKey) {
+                    onSelect(event);
+                    return;
+                  }
+                  onOpenImage(index);
+                }}
+                onDoubleClick={(event) => event.stopPropagation()}
+                aria-label={`Open image ${index + 1} of ${item.attachments.length}`}
+              >
+                <AssetImage
+                  className="h-full max-h-56 w-full object-cover"
+                  attachment={attachment}
+                  alt=""
+                  draggable={false}
+                />
+              </button>
+            ))}
+          </div>
+        )}
+        {item.text && (
+          <p
+            className={cn(
+              "m-0 whitespace-pre-wrap break-words text-sm leading-[1.55] text-ink",
+              item.completed && "line-through decoration-faint/70",
+            )}
+          >
+            <RichText text={item.text} query={searchQuery} />
+          </p>
+        )}
+        {previewUrl && <LinkPreviewCard url={previewUrl} />}
+      </div>
       {!dragDisabled && (
         <button
           type="button"
-          className="drag-handle"
+          className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-lg text-faint opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-surface-hover hover:text-muted focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/35 active:cursor-grabbing group-hover:opacity-100"
           aria-label="Drag to reorder"
           onClick={(event) => event.stopPropagation()}
           {...attributes}
           {...listeners}
         >
-          <GripVertical size={15} />
+          <Icon icon={Drag01Icon} size={15} />
         </button>
       )}
     </article>

@@ -1,24 +1,50 @@
+mod double_shortcut;
+mod link_preview;
+
 use serde_json::Value;
 use std::{
+    collections::{HashSet, VecDeque},
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
+    sync::Mutex,
+    thread,
+    time::Duration,
 };
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, PhysicalPosition,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State,
 };
 
 const DATA_FILE_NAME: &str = "carbon-data.json";
 const LOCATION_FILE_NAME: &str = "data-location.txt";
+#[cfg(debug_assertions)]
+const DEVELOPMENT_DIRECTORY_NAME: &str = "development";
+
+#[derive(Default)]
+struct PendingCaptureNotifications(Mutex<VecDeque<Value>>);
+
+#[derive(Default)]
+struct PendingImageViewer(Mutex<Option<Value>>);
 
 fn io_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
 
+fn environment_data_dir(path: PathBuf) -> PathBuf {
+    #[cfg(debug_assertions)]
+    {
+        return path.join(DEVELOPMENT_DIRECTORY_NAME);
+    }
+
+    #[cfg(not(debug_assertions))]
+    path
+}
+
 fn location_file_path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_config_dir()
+        .map(environment_data_dir)
         .map(|path| path.join(LOCATION_FILE_NAME))
         .map_err(io_error)
 }
@@ -26,6 +52,7 @@ fn location_file_path(app: &AppHandle) -> Result<PathBuf, String> {
 fn default_data_path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
+        .map(environment_data_dir)
         .map(|path| path.join(DATA_FILE_NAME))
         .map_err(io_error)
 }
@@ -55,6 +82,78 @@ fn write_document(path: &Path, document: &Value) -> Result<(), String> {
     fs::rename(temporary, path).map_err(io_error)
 }
 
+fn assets_directory(data_path: &Path) -> Result<PathBuf, String> {
+    data_path
+        .parent()
+        .map(|parent| parent.join("assets"))
+        .ok_or_else(|| "The data path has no parent folder.".to_string())
+}
+
+fn validated_asset_path(data_path: &Path, relative: &str) -> Result<PathBuf, String> {
+    let mut components = Path::new(relative).components();
+    let valid = matches!(components.next(), Some(Component::Normal(value)) if value == "assets")
+        && matches!(components.next(), Some(Component::Normal(_)))
+        && components.next().is_none();
+    if !valid {
+        return Err("Invalid image asset path.".to_string());
+    }
+    Ok(data_path
+        .parent()
+        .ok_or_else(|| "The data path has no parent folder.".to_string())?
+        .join(relative))
+}
+
+fn copy_assets(source_data: &Path, destination_data: &Path) -> Result<(), String> {
+    let source = assets_directory(source_data)?;
+    let destination = assets_directory(destination_data)?;
+    if !source.exists() || source == destination {
+        return Ok(());
+    }
+    fs::create_dir_all(&destination).map_err(io_error)?;
+    for entry in fs::read_dir(source).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        if entry.file_type().map_err(io_error)?.is_file() {
+            fs::copy(entry.path(), destination.join(entry.file_name())).map_err(io_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn referenced_assets(document: &Value) -> HashSet<String> {
+    document
+        .get("sections")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|section| section.get("items").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|item| item.get("attachments").and_then(Value::as_array))
+        .flatten()
+        .filter_map(|attachment| attachment.get("path").and_then(Value::as_str))
+        .filter(|path| validated_asset_path(Path::new("carbon-data.json"), path).is_ok())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn remove_unreferenced_assets(data_path: &Path, document: &Value) -> Result<(), String> {
+    let directory = assets_directory(data_path)?;
+    if !directory.exists() {
+        return Ok(());
+    }
+    let referenced = referenced_assets(document);
+    for entry in fs::read_dir(directory).map_err(io_error)? {
+        let entry = entry.map_err(io_error)?;
+        if !entry.file_type().map_err(io_error)?.is_file() {
+            continue;
+        }
+        let relative = format!("assets/{}", entry.file_name().to_string_lossy());
+        if !referenced.contains(&relative) {
+            trash::delete(entry.path()).map_err(io_error)?;
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn load_carbon_data(app: AppHandle) -> Result<Value, String> {
     let path = resolve_data_path(&app)?;
@@ -67,12 +166,24 @@ fn load_carbon_data(app: AppHandle) -> Result<Value, String> {
 
 #[tauri::command]
 fn save_carbon_data(app: AppHandle, document: Value) -> Result<(), String> {
-    write_document(&resolve_data_path(&app)?, &document)
+    let path = resolve_data_path(&app)?;
+    write_document(&path, &document)?;
+    remove_unreferenced_assets(&path, &document)
 }
 
 #[tauri::command]
 fn get_data_file_path(app: AppHandle) -> Result<String, String> {
     resolve_data_path(&app).map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn show_main_window(app: AppHandle) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| "The main window is unavailable.".to_string())?;
+    window.unminimize().map_err(io_error)?;
+    window.show().map_err(io_error)?;
+    window.set_focus().map_err(io_error)
 }
 
 #[tauri::command]
@@ -90,13 +201,147 @@ fn choose_data_file(app: AppHandle, document: Value) -> Result<Option<String>, S
     if selected.extension().is_none() {
         selected.set_extension("json");
     }
+    copy_assets(&current, &selected)?;
+    link_preview::copy_cache(&current, &selected)?;
     write_document(&selected, &document)?;
+    remove_unreferenced_assets(&selected, &document)?;
     let pointer = location_file_path(&app)?;
     if let Some(parent) = pointer.parent() {
         fs::create_dir_all(parent).map_err(io_error)?;
     }
     fs::write(&pointer, selected.to_string_lossy().as_bytes()).map_err(io_error)?;
     Ok(Some(selected.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn save_image_asset(
+    app: AppHandle,
+    id: String,
+    mime_type: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    if id.is_empty()
+        || !id
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || "-_".contains(character))
+    {
+        return Err("Invalid image identifier.".to_string());
+    }
+    if bytes.is_empty() || bytes.len() > 25 * 1024 * 1024 {
+        return Err("Images must be between 1 byte and 25 MB.".to_string());
+    }
+    let extension = match mime_type.as_str() {
+        "image/png" => "png",
+        "image/jpeg" => "jpg",
+        "image/webp" => "webp",
+        "image/gif" => "gif",
+        "image/bmp" => "bmp",
+        _ => return Err("This image format is not supported.".to_string()),
+    };
+    let relative = format!("assets/{id}.{extension}");
+    let path = validated_asset_path(&resolve_data_path(&app)?, &relative)?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "The asset path has no parent folder.".to_string())?;
+    fs::create_dir_all(parent).map_err(io_error)?;
+    let temporary = path.with_extension(format!("{extension}.tmp"));
+    fs::write(&temporary, bytes).map_err(io_error)?;
+    fs::rename(temporary, path).map_err(io_error)?;
+    Ok(relative)
+}
+
+#[tauri::command]
+fn read_image_asset(app: AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    let path = validated_asset_path(&resolve_data_path(&app)?, &path)?;
+    let bytes = fs::read(path).map_err(io_error)?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+async fn copy_image_asset(app: AppHandle, path: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+
+        let path = validated_asset_path(&resolve_data_path(&app)?, &path)?;
+        let decoded = image::open(path).map_err(io_error)?.into_rgba8();
+        let (width, height) = decoded.dimensions();
+        let image = tauri::image::Image::new_owned(decoded.into_raw(), width, height);
+        app.clipboard().write_image(&image).map_err(io_error)
+    })
+    .await
+    .map_err(io_error)?
+}
+
+#[tauri::command]
+async fn copy_items_to_clipboard_history(
+    app: AppHandle,
+    image_paths: Vec<String>,
+    texts: Vec<String>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        use tauri_plugin_clipboard_manager::ClipboardExt;
+
+        // Windows records clipboard history asynchronously. Fast consecutive
+        // writes are coalesced, so leave enough time for each entry to be
+        // committed before replacing the active clipboard content.
+        const CLIPBOARD_HISTORY_SETTLE_TIME: Duration = Duration::from_millis(700);
+        const MAX_ENTRIES: usize = 200;
+
+        let entry_count = image_paths.len() + texts.len();
+        if entry_count == 0 {
+            return Ok(0);
+        }
+        if entry_count > MAX_ENTRIES {
+            return Err(format!(
+                "A maximum of {MAX_ENTRIES} clipboard entries can be copied at once."
+            ));
+        }
+
+        let data_path = resolve_data_path(&app)?;
+        for relative_path in image_paths {
+            let path = validated_asset_path(&data_path, &relative_path)?;
+            let decoded = image::open(path).map_err(io_error)?.into_rgba8();
+            let (width, height) = decoded.dimensions();
+            let image = tauri::image::Image::new_owned(decoded.into_raw(), width, height);
+            app.clipboard().write_image(&image).map_err(io_error)?;
+            thread::sleep(CLIPBOARD_HISTORY_SETTLE_TIME);
+        }
+
+        for text in texts {
+            if text.is_empty() {
+                continue;
+            }
+            app.clipboard().write_text(text).map_err(io_error)?;
+            thread::sleep(CLIPBOARD_HISTORY_SETTLE_TIME);
+        }
+
+        Ok(entry_count)
+    })
+    .await
+    .map_err(io_error)?
+}
+
+#[tauri::command]
+fn trash_image_asset(
+    app: AppHandle,
+    item_id: String,
+    attachment_id: String,
+    path: String,
+) -> Result<(), String> {
+    let path = validated_asset_path(&resolve_data_path(&app)?, &path)?;
+    if !path.exists() {
+        return Err("The image file no longer exists.".to_string());
+    }
+    trash::delete(path).map_err(io_error)?;
+    app.emit_to(
+        "main",
+        "image-viewer-attachment-trashed",
+        serde_json::json!({
+            "itemId": item_id,
+            "attachmentId": attachment_id,
+        }),
+    )
+    .map_err(io_error)
 }
 
 #[tauri::command]
@@ -476,7 +721,12 @@ fn capture_selected_text() -> Result<String, String> {
 }
 
 #[tauri::command]
-fn show_capture_notification(app: AppHandle, message: String) -> Result<(), String> {
+fn show_capture_notification(
+    app: AppHandle,
+    pending: State<'_, PendingCaptureNotifications>,
+    payload: Value,
+) -> Result<(), String> {
+    pending.0.lock().map_err(io_error)?.push_back(payload);
     let window = app
         .get_webview_window("capture-toast")
         .ok_or_else(|| "The capture notification window is unavailable.".to_string())?;
@@ -487,6 +737,9 @@ fn show_capture_notification(app: AppHandle, message: String) -> Result<(), Stri
         .or(app.primary_monitor().map_err(io_error)?)
         .ok_or_else(|| "No active monitor was found.".to_string())?;
     let work_area = monitor.work_area();
+    window
+        .set_size(LogicalSize::new(360.0, 520.0))
+        .map_err(io_error)?;
     let window_size = window.outer_size().map_err(io_error)?;
     let x = work_area.position.x
         + ((work_area.size.width as i64 - window_size.width as i64) / 2) as i32;
@@ -495,11 +748,42 @@ fn show_capture_notification(app: AppHandle, message: String) -> Result<(), Stri
     window
         .set_position(PhysicalPosition::new(x, y))
         .map_err(io_error)?;
-    let _ = window.set_ignore_cursor_events(true);
+    let _ = window.set_ignore_cursor_events(false);
     let _ = window.set_focusable(false);
     window.show().map_err(io_error)?;
-    app.emit_to("capture-toast", "capture-notification", message)
+    app.emit_to("capture-toast", "capture-notification-ready", ())
         .map_err(io_error)
+}
+
+#[tauri::command]
+fn take_capture_notifications(
+    pending: State<'_, PendingCaptureNotifications>,
+) -> Result<Vec<Value>, String> {
+    Ok(pending.0.lock().map_err(io_error)?.drain(..).collect())
+}
+
+#[tauri::command]
+fn show_image_viewer(
+    app: AppHandle,
+    pending: State<'_, PendingImageViewer>,
+    payload: Value,
+) -> Result<(), String> {
+    *pending.0.lock().map_err(io_error)? = Some(payload);
+    let window = app
+        .get_webview_window("image-viewer")
+        .ok_or_else(|| "The image viewer window is unavailable.".to_string())?;
+    let _ = window.unminimize();
+    window.show().map_err(io_error)?;
+    window.set_focus().map_err(io_error)?;
+    app.emit_to("image-viewer", "image-viewer-ready", ())
+        .map_err(io_error)
+}
+
+#[tauri::command]
+fn take_image_viewer_payload(
+    pending: State<'_, PendingImageViewer>,
+) -> Result<Option<Value>, String> {
+    Ok(pending.0.lock().map_err(io_error)?.take())
 }
 
 #[tauri::command]
@@ -518,10 +802,13 @@ fn show_window(app: &AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(PendingCaptureNotifications::default())
+        .manage(PendingImageViewer::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::default().build())
         .setup(|app| {
+            double_shortcut::start(app.handle().clone());
             let show = MenuItem::with_id(app, "show", "Show Carbon", true, None::<&str>)?;
             let always_on_top = MenuItem::with_id(
                 app,
@@ -576,10 +863,22 @@ pub fn run() {
             load_carbon_data,
             save_carbon_data,
             get_data_file_path,
+            show_main_window,
+            double_shortcut::configure_double_press_shortcuts,
             choose_data_file,
             reveal_data_file,
+            save_image_asset,
+            read_image_asset,
+            copy_image_asset,
+            copy_items_to_clipboard_history,
+            link_preview::get_link_preview,
+            link_preview::read_link_preview_image,
+            trash_image_asset,
             capture_selected_text,
             show_capture_notification,
+            take_capture_notifications,
+            show_image_viewer,
+            take_image_viewer_payload,
             quit_app
         ])
         .run(tauri::generate_context!())

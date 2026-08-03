@@ -1,0 +1,223 @@
+import {
+  Add01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
+  CircleIcon,
+  FileEditIcon,
+  InboxIcon,
+} from "@hugeicons/core-free-icons";
+import type {
+  ClipboardEvent,
+  KeyboardEvent,
+  RefObject,
+} from "react";
+import { AssetImage } from "../../../components/AssetImage";
+import { Icon } from "../../../components/ui/icon";
+import type { CarbonAttachment } from "../../../lib/model";
+import type { DraftImage } from "../types";
+
+export function NoteComposer({
+  captureSectionName,
+  draft,
+  draftImages,
+  editing,
+  existingAttachments,
+  inputRef,
+  saving,
+  onCancelEditing,
+  onDraftChange,
+  onOpenCommands,
+  onOpenImage,
+  onPaste,
+  onRemoveDraftImage,
+  onRemoveExistingImage,
+  onSubmit,
+}: {
+  captureSectionName: string;
+  draft: string;
+  draftImages: DraftImage[];
+  editing: boolean;
+  existingAttachments: CarbonAttachment[];
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  saving: boolean;
+  onCancelEditing: () => void;
+  onDraftChange: (value: string) => void;
+  onOpenCommands: () => void;
+  onOpenImage: (index: number) => void;
+  onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  onRemoveDraftImage: (id: string) => void;
+  onRemoveExistingImage: (id: string) => void;
+  onSubmit: () => void;
+}) {
+  const attachmentCount = existingAttachments.length + draftImages.length;
+  const hasContent = editing || Boolean(draft.trim() || attachmentCount);
+  const removeButtonStyles =
+    "absolute right-1 top-1 inline-flex size-5 cursor-pointer items-center justify-center rounded-md bg-black/60 text-white opacity-0 outline-none backdrop-blur-sm transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100";
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Escape" && editing) {
+      event.preventDefault();
+      onCancelEditing();
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      onSubmit();
+    }
+  }
+
+  return (
+    <footer className="shrink-0 px-3 pb-3 pt-1">
+      <div className="overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-panel transition-[border-color,box-shadow] focus-within:border-accent/45 focus-within:shadow-float">
+        {editing && (
+          <div className="flex items-center justify-between gap-3 border-b border-line bg-surface px-3 py-2">
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink">
+              <Icon className="shrink-0 text-muted" icon={FileEditIcon} size={13} />
+              Editing item
+            </span>
+            <button
+              type="button"
+              className="inline-flex cursor-pointer items-center gap-1 rounded-md text-xs font-medium text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+              onClick={onCancelEditing}
+            >
+              <Icon icon={Cancel01Icon} size={12} />
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {attachmentCount > 0 && (
+          <div className="flex gap-2 overflow-x-auto border-b border-line px-3 py-3">
+            {existingAttachments.map((attachment, index) => (
+              <div
+                className="group relative size-16 shrink-0 overflow-hidden rounded-xl border border-line bg-surface"
+                key={attachment.id}
+              >
+                <button
+                  type="button"
+                  className="h-full w-full cursor-zoom-in overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                  onClick={() => onOpenImage(index)}
+                  aria-label={`Open attachment ${index + 1}`}
+                >
+                  <AssetImage
+                    className="h-full w-full object-cover"
+                    attachment={attachment}
+                    alt=""
+                    draggable={false}
+                  />
+                </button>
+                <button
+                  type="button"
+                  className={removeButtonStyles}
+                  onClick={() => onRemoveExistingImage(attachment.id)}
+                  aria-label={`Remove attachment ${index + 1}`}
+                >
+                  <Icon icon={Cancel01Icon} size={11} />
+                </button>
+              </div>
+            ))}
+            {draftImages.map((image, index) => {
+              const combinedIndex = existingAttachments.length + index;
+              return (
+                <div
+                  className="group relative size-16 shrink-0 overflow-hidden rounded-xl border border-line bg-surface"
+                  key={image.id}
+                >
+                  <button
+                    type="button"
+                    className="h-full w-full cursor-zoom-in overflow-hidden outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                    onClick={() => onOpenImage(combinedIndex)}
+                    aria-label={`Open attachment ${combinedIndex + 1}`}
+                  >
+                    <img
+                      className="h-full w-full object-cover"
+                      src={image.previewUrl}
+                      alt=""
+                      draggable={false}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    className={removeButtonStyles}
+                    onClick={() => onRemoveDraftImage(image.id)}
+                    aria-label={`Remove attachment ${combinedIndex + 1}`}
+                  >
+                    <Icon icon={Cancel01Icon} size={11} />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex items-start gap-2.5 px-3 py-3">
+          <Icon
+            className="mt-0.5 shrink-0 text-faint"
+            icon={CircleIcon}
+            size={19}
+          />
+          <textarea
+            ref={inputRef}
+            className="max-h-32 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-5 text-ink outline-none placeholder:text-faint"
+            value={draft}
+            rows={1}
+            placeholder={
+              editing
+                ? "Edit this item or paste more images…"
+                : "Add a note or paste an image…"
+            }
+            onChange={(event) => onDraftChange(event.target.value)}
+            onPaste={onPaste}
+            onKeyDown={handleKeyDown}
+          />
+          {hasContent && (
+            <button
+              type="button"
+              className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-sm outline-none transition-colors hover:bg-accent-strong focus-visible:ring-2 focus-visible:ring-accent/35 disabled:cursor-default disabled:opacity-45"
+              onClick={onSubmit}
+              disabled={saving}
+              aria-label={editing ? "Save changes" : "Add item"}
+            >
+              <Icon
+                icon={editing ? CheckmarkCircle02Icon : Add01Icon}
+                size={17}
+                strokeWidth={2.2}
+              />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between gap-3 border-t border-line bg-surface px-3 py-2">
+          {editing ? (
+            <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-medium text-muted">
+              <Icon className="shrink-0" icon={FileEditIcon} size={12} />
+              Edit mode
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-md text-xs font-medium text-muted outline-none transition-colors hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+              onClick={onOpenCommands}
+            >
+              <Icon className="shrink-0" icon={InboxIcon} size={12} />
+              <span className="truncate">{captureSectionName}</span>
+            </button>
+          )}
+          <span className="shrink-0 text-xs text-faint">
+            <kbd className="font-medium">Enter</kbd>{" "}
+            {editing ? "save" : "add"} ·{" "}
+            {editing ? (
+              <>
+                <kbd className="font-medium">Esc</kbd> cancel
+              </>
+            ) : (
+              <>
+                <kbd className="font-medium">Shift Enter</kbd> new line
+              </>
+            )}
+          </span>
+        </div>
+      </div>
+    </footer>
+  );
+}

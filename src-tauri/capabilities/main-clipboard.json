@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-clipboard",
+  "description": "Allows the main Carbon window to create local items from clipboard content",
+  "windows": ["main"],
+  "permissions": [
+    "clipboard-manager:allow-read-image",
+    "clipboard-manager:allow-read-text"
+  ]
+}

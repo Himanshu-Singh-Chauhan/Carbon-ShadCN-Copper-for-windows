@@ -1,7 +1,11 @@
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronRight } from "lucide-react";
+import { ArrowRight01Icon, CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/utils";
+import { Icon } from "./icon";
+
+const itemStyles =
+  "relative flex min-h-9 cursor-pointer select-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-ink outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-surface-hover data-[state=open]:bg-surface-hover [&>svg]:shrink-0 [&>svg]:text-muted";
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
@@ -14,6 +18,7 @@ export function DropdownMenuContent({
   className,
   sideOffset = 8,
   align = "end",
+  collisionPadding = 12,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.Content>) {
   return (
@@ -21,7 +26,11 @@ export function DropdownMenuContent({
       <DropdownMenuPrimitive.Content
         sideOffset={sideOffset}
         align={align}
-        className={cn("dropdown-content", className)}
+        collisionPadding={collisionPadding}
+        className={cn(
+          "z-[70] min-w-52 overflow-hidden rounded-xl border border-line bg-surface-raised p-1.5 text-ink shadow-float outline-none data-[state=closed]:animate-out data-[state=open]:animate-in data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+          className,
+        )}
         {...props}
       />
     </DropdownMenuPrimitive.Portal>
@@ -35,7 +44,7 @@ export function DropdownMenuItem({
 }: ComponentProps<typeof DropdownMenuPrimitive.Item> & { inset?: boolean }) {
   return (
     <DropdownMenuPrimitive.Item
-      className={cn("dropdown-item", inset && "dropdown-item--inset", className)}
+      className={cn(itemStyles, inset && "pl-8", className)}
       {...props}
     />
   );
@@ -49,13 +58,13 @@ export function DropdownMenuCheckboxItem({
 }: ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
   return (
     <DropdownMenuPrimitive.CheckboxItem
-      className={cn("dropdown-item dropdown-item--check", className)}
+      className={cn(itemStyles, "pl-8", className)}
       checked={checked}
       {...props}
     >
-      <span className="dropdown-indicator">
+      <span className="absolute left-2 inline-flex size-4 items-center justify-center text-accent">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check size={14} />
+          <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.2} />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -70,12 +79,12 @@ export function DropdownMenuRadioItem({
 }: ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
   return (
     <DropdownMenuPrimitive.RadioItem
-      className={cn("dropdown-item dropdown-item--check", className)}
+      className={cn(itemStyles, "pl-8", className)}
       {...props}
     >
-      <span className="dropdown-indicator">
+      <span className="absolute left-2 inline-flex size-4 items-center justify-center text-accent">
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check size={14} />
+          <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.2} />
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -89,7 +98,10 @@ export function DropdownMenuLabel({
 }: ComponentProps<typeof DropdownMenuPrimitive.Label>) {
   return (
     <DropdownMenuPrimitive.Label
-      className={cn("dropdown-label", className)}
+      className={cn(
+        "px-2.5 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.12em] text-faint",
+        className,
+      )}
       {...props}
     />
   );
@@ -101,7 +113,7 @@ export function DropdownMenuSeparator({
 }: ComponentProps<typeof DropdownMenuPrimitive.Separator>) {
   return (
     <DropdownMenuPrimitive.Separator
-      className={cn("dropdown-separator", className)}
+      className={cn("-mx-0.5 my-1.5 h-px bg-line", className)}
       {...props}
     />
   );
@@ -112,7 +124,11 @@ export function DropdownMenuShortcut({
 }: {
   children: React.ReactNode;
 }) {
-  return <span className="dropdown-shortcut">{children}</span>;
+  return (
+    <span className="ml-auto pl-4 text-xs font-medium tracking-wide text-faint">
+      {children}
+    </span>
+  );
 }
 
 export function DropdownMenuSubTrigger({
@@ -122,22 +138,33 @@ export function DropdownMenuSubTrigger({
 }: ComponentProps<typeof DropdownMenuPrimitive.SubTrigger>) {
   return (
     <DropdownMenuPrimitive.SubTrigger
-      className={cn("dropdown-item", className)}
+      className={cn(itemStyles, className)}
       {...props}
     >
       {children}
-      <ChevronRight className="dropdown-chevron" size={14} />
+      <Icon
+        className="ml-auto text-faint"
+        icon={ArrowRight01Icon}
+        size={14}
+      />
     </DropdownMenuPrimitive.SubTrigger>
   );
 }
 
 export function DropdownMenuSubContent({
   className,
+  sideOffset = 6,
+  collisionPadding = 12,
   ...props
 }: ComponentProps<typeof DropdownMenuPrimitive.SubContent>) {
   return (
     <DropdownMenuPrimitive.SubContent
-      className={cn("dropdown-content", className)}
+      className={cn(
+        "z-[70] min-w-44 overflow-hidden rounded-xl border border-line bg-surface-raised p-1.5 text-ink shadow-float outline-none",
+        className,
+      )}
+      sideOffset={sideOffset}
+      collisionPadding={collisionPadding}
       {...props}
     />
   );
