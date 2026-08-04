@@ -435,6 +435,9 @@ export function CarbonApp() {
       style={
         backgroundImageUrl
           ? {
+              "--app-background-image": `url("${backgroundImageUrl}")`,
+              "--app-background-position": `${backgroundPosition.x}% ${backgroundPosition.y}%`,
+              "--app-background-size": `auto ${backgroundPosition.zoom * 100}vh`,
               "--card-backdrop-blur": `${settings.backgroundBlur}px`,
             } as CSSProperties
           : undefined

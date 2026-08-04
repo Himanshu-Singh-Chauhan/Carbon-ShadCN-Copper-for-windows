@@ -34,8 +34,6 @@
   --line: oklch(0.922 0 0);
   --line-strong: oklch(0.84 0 0);
   --window-ring: oklch(0.84 0 0);
-  --card-ring: oklch(0.88 0 0);
-  --card-ring-strong: oklch(0.76 0 0);
   --accent: oklch(0.205 0 0);
   --accent-strong: oklch(0.145 0 0);
   --accent-soft: oklch(0.97 0 0);
@@ -58,8 +56,6 @@
   --line: oklch(1 0 0 / 10%);
   --line-strong: oklch(1 0 0 / 18%);
   --window-ring: oklch(0.26 0 0);
-  --card-ring: oklch(0.3 0 0);
-  --card-ring-strong: oklch(0.42 0 0);
   --accent: oklch(0.922 0 0);
   --accent-strong: oklch(0.985 0 0);
   --accent-soft: oklch(0.269 0 0);
@@ -135,30 +131,6 @@
   }
 }
 
-[data-note-card] {
-  border: 0;
-  outline: 0;
-}
-
-[data-note-card]::after {
-  position: absolute;
-  z-index: 5;
-  inset: 0;
-  border: 2px solid var(--card-ring);
-  border-radius: inherit;
-  pointer-events: none;
-  content: "";
-}
-
-[data-note-card]:hover,
-[data-note-card][data-focused] {
-  --card-ring: var(--card-ring-strong);
-}
-
-[data-note-card][data-selected] {
-  --card-ring: var(--accent);
-}
-
 [data-app-background] [data-note-card] {
   background-color: color-mix(in oklab, var(--surface-raised) 62%, transparent);
   background-image: linear-gradient(
@@ -184,7 +156,16 @@
 }
 
 [data-app-background] [data-note-sticky-surface] {
-  background: transparent;
+  margin-right: -2px;
+  margin-left: -12px;
+  padding-right: 2px;
+  padding-left: 12px;
+  background-color: var(--canvas);
+  background-image: var(--app-background-image);
+  background-attachment: fixed;
+  background-position: var(--app-background-position, center);
+  background-repeat: no-repeat;
+  background-size: var(--app-background-size, auto 100vh);
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }
@@ -226,7 +207,6 @@
       var(--surface-raised) 94%,
       transparent
     );
-    --card-ring: var(--ink);
   }
 }
 

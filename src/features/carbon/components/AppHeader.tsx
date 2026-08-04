@@ -29,11 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Icon } from "../../../components/ui/icon";
-import type {
-  CarbonSection,
-  CarbonSettings,
-  DoneViewMode,
-  NoteSortMode,
+import {
+  ALL_SECTIONS,
+  type CarbonSection,
+  type CarbonSettings,
+  type DoneViewMode,
+  type NoteSortMode,
 } from "../../../lib/model";
 import { DoneViewControl } from "./DoneViewControl";
 
@@ -97,7 +98,13 @@ export function AppHeader({
   onToggleSourceFilter: (key: string) => void;
 }) {
   return (
-    <header className="relative z-10 shrink-0 px-3 pt-4">
+    <header
+      className={
+        activeBucketId === ALL_SECTIONS
+          ? "relative z-10 shrink-0 px-3 pt-4"
+          : "relative z-10 shrink-0 px-3 pb-2 pt-4"
+      }
+    >
       <div className="flex items-center gap-2">
         <label className="flex h-10 min-w-0 flex-1 items-center gap-2.5 rounded-xl border border-line bg-surface-raised px-3 text-muted shadow-sm transition-[border-color,box-shadow] focus-within:border-accent/55 focus-within:ring-2 focus-within:ring-accent/10">
           <Icon className="shrink-0 text-faint" icon={Search01Icon} size={17} />
