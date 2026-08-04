@@ -1,29 +1,15 @@
-import { type DragEndEvent } from "@dnd-kit/core";
 import { SparklesIcon } from "@hugeicons/core-free-icons";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
-import { Fzf } from "fzf";
 import {
   useCallback,
-  useEffect,
-  useMemo,
   useRef,
   useState,
-  type MouseEvent,
   type PointerEvent,
 } from "react";
-import { CommandPalette } from "../../components/CommandPalette";
-import { SettingsDialog } from "../../components/SettingsDialog";
-import type { SourceFilterOption } from "../../components/SourceFilterMenu";
 import { Icon } from "../../components/ui/icon";
-import {
-  ALL_SECTIONS,
-  type CarbonAttachment,
-  type CarbonItem,
-} from "../../lib/model";
+import { ALL_SECTIONS, type CarbonAttachment } from "../../lib/model";
 import {
   chooseDataPath,
-  copyItemsToClipboardHistory,
   isTauri,
   quitApp,
   revealDataFile,
@@ -34,29 +20,25 @@ import {
   getCarbonDocument,
   useCarbonStore,
 } from "../../lib/store";
-import { formatShortcut, isEditableTarget } from "../../lib/utils";
+import { formatShortcut } from "../../lib/utils";
 import { AppHeader } from "./components/AppHeader";
-import { ItemContextMenu } from "./components/ItemContextMenu";
+import { CarbonOverlays } from "./components/CarbonOverlays";
 import { NoteComposer } from "./components/NoteComposer";
 import { NotesView } from "./components/NotesView";
-import { PasteContextMenu } from "./components/PasteContextMenu";
 import { SelectionToolbar } from "./components/SelectionToolbar";
-import { ToastRegion } from "./components/ToastRegion";
 import { useCaptureShortcut } from "./hooks/useCaptureShortcut";
+import { useCarbonContextMenus } from "./hooks/useCarbonContextMenus";
+import { useCarbonKeyboard } from "./hooks/useCarbonKeyboard";
 import { useCarbonPersistence } from "./hooks/useCarbonPersistence";
 import { useDraftComposer } from "./hooks/useDraftComposer";
 import { useDoublePressShortcuts } from "./hooks/useDoublePressShortcuts";
 import { useFlexiblePaste } from "./hooks/useFlexiblePaste";
+import { useItemClipboard } from "./hooks/useItemClipboard";
 import { useShowWindowShortcut } from "./hooks/useShowWindowShortcut";
 import { useTheme } from "./hooks/useTheme";
 import { useWindowIntegration } from "./hooks/useWindowIntegration";
-import type { ContextMenuState, ToastMessage } from "./types";
-
-const UNATTRIBUTED_SOURCE_KEY = "source:unattributed";
-
-function itemSourceKey(item: CarbonItem) {
-  return item.source ? `source:app:${item.source.id}` : UNATTRIBUTED_SOURCE_KEY;
-}
+import { useVisibleNotes } from "./hooks/useVisibleNotes";
+import type { ToastMessage } from "./types";
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -96,19 +78,27 @@ export function CarbonApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dataPath, setDataPath] = useState("Loading local data…");
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [contextMenu, setContextMenu] = useState<ContextMenuState>(null);
-  const [pasteMenu, setPasteMenu] = useState<{ x: number; y: number } | null>(
-    null,
-  );
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [captureReady, setCaptureReady] = useState(true);
-  const [copyingItems, setCopyingItems] = useState(false);
-  const [sourceFilters, setSourceFilters] = useState<
-    Record<string, string[]>
-  >({});
   const searchRef = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
-  const copyInFlight = useRef(false);
+  const {
+    contextItem,
+    contextMenu,
+    contextSelectedItems,
+    handleDragEnd,
+    openContextMenu,
+    openPasteMenu,
+    pasteMenu,
+    setContextMenu,
+    setPasteMenu,
+  } = useCarbonContextMenus({
+    clearSelected,
+    reorderItem,
+    sections,
+    selectedIds,
+    setFocusedItemId,
+  });
 
   const notify = useCallback(
     (message: string, kind: ToastMessage["kind"] = "default") => {
@@ -206,261 +196,50 @@ export function CarbonApp() {
     showWindowHotkey: settings.showWindowHotkey,
   });
 
-  const sourceSections = useMemo(
-    () =>
-      activeSectionId === ALL_SECTIONS
-        ? sections
-        : sections.filter((section) => section.id === activeSectionId),
-    [activeSectionId, sections],
-  );
-  const selectedSourceKeys = sourceFilters[activeSectionId] ?? [];
-  const sourceFilterOptions = useMemo<SourceFilterOption[]>(() => {
-    const options = new Map<string, SourceFilterOption>();
-    for (const item of sourceSections.flatMap((section) => section.items)) {
-      const key = itemSourceKey(item);
-      const existing = options.get(key);
-      if (existing) {
-        existing.count += 1;
-        continue;
-      }
-      options.set(key, {
-        key,
-        label: item.source?.appName ?? "Unattributed",
-        description: item.source ? undefined : "No captured app",
-        source: item.source,
-        count: 1,
-      });
-    }
-    return [...options.values()].sort((left, right) => {
-      if (left.key === UNATTRIBUTED_SOURCE_KEY) return 1;
-      if (right.key === UNATTRIBUTED_SOURCE_KEY) return -1;
-      return left.label.localeCompare(right.label);
-    });
-  }, [sourceSections]);
-
-  const visibleSections = useMemo(() => {
-    const selectedSources = new Set(selectedSourceKeys);
-    let filteredSections =
-      selectedSources.size === 0
-        ? sourceSections
-        : sourceSections
-            .map((section) => ({
-              ...section,
-              items: section.items.filter((item) =>
-                selectedSources.has(itemSourceKey(item)),
-              ),
-            }))
-            .filter((section) => section.items.length > 0);
-    if (query.trim()) {
-      const items = filteredSections.flatMap((section) =>
-        section.items.map((item) => ({ item, sectionId: section.id })),
-      );
-      const fzf = new Fzf(items, {
-        selector: (entry) => entry.item.text,
-        fuzzy: "v2",
-      });
-      const matchingIds = new Set(
-        fzf.find(query).map((result) => result.item.item.id),
-      );
-      filteredSections = filteredSections
-        .map((section) => ({
-          ...section,
-          items: section.items.filter((item) => matchingIds.has(item.id)),
-        }))
-        .filter((section) => section.items.length > 0);
-    }
-
-    return filteredSections.map((section) => {
-      if (section.sortMode === "manual") return section;
-      const direction = section.sortMode === "created-asc" ? 1 : -1;
-      return {
-        ...section,
-        items: [...section.items].sort(
-          (left, right) =>
-            direction *
-            (Date.parse(left.createdAt) - Date.parse(right.createdAt)),
-        ),
-      };
-    });
-  }, [query, selectedSourceKeys, sourceSections]);
-
-  const allVisibleItems = useMemo(
-    () => visibleSections.flatMap((section) => section.items),
-    [visibleSections],
-  );
-  const selectedItems = useMemo(() => {
-    const selection = new Set(selectedIds);
-    return sections.flatMap((section) =>
-      section.items.filter((item) => selection.has(item.id)),
-    );
-  }, [sections, selectedIds]);
-
-  function itemsForIds(ids: string[]) {
-    const selection = new Set(ids);
-    return useCarbonStore
-      .getState()
-      .sections.flatMap((section) =>
-        section.items.filter((item) => selection.has(item.id)),
-      );
-  }
-
-  async function copyItems(items: CarbonItem[], asList = false) {
-    if (!items.length || copyInFlight.current) return;
-    const images = items.flatMap((item) => item.attachments);
-    const texts = asList
-      ? [
-          items
-            .filter((item) => item.text)
-            .map((item) => `- ${item.text.replace(/\n/g, "\n  ")}`)
-            .join("\n"),
-        ].filter(Boolean)
-      : items.map((item) => item.text).filter(Boolean);
-    const entryCount = images.length + texts.length;
-    if (!entryCount) return;
-    const statusId = ++toastId.current;
-    copyInFlight.current = true;
-    setCopyingItems(true);
-    setToasts((current) => [
-      ...current.slice(-2),
-      {
-        id: statusId,
-        message: `Copying ${entryCount} clipboard ${entryCount === 1 ? "entry" : "entries"}…`,
-        kind: "loading",
-      },
-    ]);
-
-    const finishStatus = (
-      message: string,
-      kind: ToastMessage["kind"] = "default",
-    ) => {
-      setToasts((current) =>
-        current.map((toast) =>
-          toast.id === statusId ? { ...toast, message, kind } : toast,
-        ),
-      );
-      window.setTimeout(
-        () =>
-          setToasts((current) =>
-            current.filter((toast) => toast.id !== statusId),
-          ),
-        2600,
-      );
-    };
-
-    try {
-      await copyItemsToClipboardHistory(images, texts);
-      finishStatus(
-        `Copied ${entryCount} clipboard ${entryCount === 1 ? "entry" : "entries"}`,
-      );
-    } catch {
-      finishStatus("Clipboard access was unavailable.", "error");
-    } finally {
-      copyInFlight.current = false;
-      setCopyingItems(false);
-    }
-  }
-
-  function copySelectedItems(asList = false) {
-    return copyItems(itemsForIds(useCarbonStore.getState().selectedIds), asList);
-  }
-
-  async function copyMarkdown() {
-    const content = sourceSections
-      .map(
-        (section) =>
-          `# ${section.name}\n\n${section.items
-            .map((item) => `- [${item.completed ? "x" : " "}] ${item.text}`)
-            .join("\n")}`,
-      )
-      .join("\n\n");
-    if (!content.trim()) {
-      notify("There is nothing to export.");
-      return;
-    }
-    if (isTauri()) await writeText(content);
-    else await navigator.clipboard.writeText(content);
-    notify("Markdown copied to clipboard");
-  }
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const modifier = event.ctrlKey || event.metaKey;
-      if (modifier && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setCommandOpen(true);
-        return;
-      }
-      if (modifier && event.key === ",") {
-        event.preventDefault();
-        setSettingsOpen(true);
-        return;
-      }
-      if (modifier && event.key.toLowerCase() === "f") {
-        event.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (modifier && event.key.toLowerCase() === "c" && selectedIds.length) {
-        event.preventDefault();
-        void copySelectedItems();
-        return;
-      }
-      if (isEditableTarget(event.target)) return;
-      if (modifier && event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        setFocusedItemId(null);
-        setSelected(allVisibleItems.map((item) => item.id));
-      } else if (event.key === "Delete" && selectedIds.length) {
-        event.preventDefault();
-        deleteItems();
-      } else if (event.key === " " && selectedIds.length) {
-        event.preventDefault();
-        selectedIds.forEach(toggleItem);
-      } else if (event.key === "Enter" && focusedItemId) {
-        const item = sections
-          .flatMap((section) => section.items)
-          .find((candidate) => candidate.id === focusedItemId);
-        if (item) {
-          event.preventDefault();
-          startEditing(item);
-          clearSelected();
-        }
-      } else if (event.key === "Escape") {
-        clearSelected();
-        setFocusedItemId(null);
-        setContextMenu(null);
-        setPasteMenu(null);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
+  const {
     allVisibleItems,
-    clearSelected,
-    deleteItems,
-    focusedItemId,
+    clearSourceFilter,
+    itemCount,
+    selectedSourceKeys,
+    sourceFilterOptions,
+    sourceSections,
+    toggleSourceFilter,
+    visibleSections,
+  } = useVisibleNotes({ activeSectionId, query, sections });
+
+  const {
+    copyItems,
+    copyMarkdown,
+    copySelectedItems,
+    copyingItems,
+    selectedItems,
+  } = useItemClipboard({
+    notify,
     sections,
     selectedIds,
+    setToasts,
+    sourceSections,
+    toastId,
+  });
+
+  useCarbonKeyboard({
+    allVisibleItems,
+    clearSelected,
+    copySelectedItems,
+    deleteItems,
+    focusedItemId,
+    searchRef,
+    sections,
+    selectedIds,
+    setCommandOpen,
+    setContextMenu,
+    setFocusedItemId,
+    setPasteMenu,
     setSelected,
+    setSettingsOpen,
     startEditing,
     toggleItem,
-  ]);
-
-  useEffect(() => {
-    if (!contextMenu && !pasteMenu) return;
-    const close = () => {
-      setContextMenu(null);
-      setPasteMenu(null);
-    };
-    window.addEventListener("pointerdown", close);
-    window.addEventListener("blur", close);
-    window.addEventListener("resize", close);
-    return () => {
-      window.removeEventListener("pointerdown", close);
-      window.removeEventListener("blur", close);
-      window.removeEventListener("resize", close);
-    };
-  }, [contextMenu, pasteMenu]);
+  });
 
   function startWindowDrag(event: PointerEvent<HTMLElement>) {
     if (!isTauri() || event.button !== 0) return;
@@ -480,57 +259,6 @@ export function CarbonApp() {
       return;
     }
     void getCurrentWindow().startDragging();
-  }
-
-  function sectionForItem(itemId: string) {
-    return sections.find((section) =>
-      section.items.some((item) => item.id === itemId),
-    );
-  }
-
-  function openContextMenu(event: MouseEvent, itemId: string) {
-    event.preventDefault();
-    setPasteMenu(null);
-    if (!selectedIds.includes(itemId)) {
-      clearSelected();
-      setFocusedItemId(itemId);
-    }
-    setContextMenu({
-      x: Math.min(event.clientX, window.innerWidth - 220),
-      y: Math.min(event.clientY, window.innerHeight - 320),
-      itemId,
-      itemIds: selectedIds.includes(itemId) ? [...selectedIds] : [itemId],
-    });
-  }
-
-  function openPasteMenu(event: MouseEvent<HTMLElement>) {
-    const target = event.target as HTMLElement;
-    if (
-      target.closest(
-        "button, input, textarea, label, a, [role], [data-note-card]",
-      )
-    ) {
-      return;
-    }
-    event.preventDefault();
-    setContextMenu(null);
-    setPasteMenu({
-      x: Math.max(8, Math.min(event.clientX, window.innerWidth - 188)),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - 56)),
-    });
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const activeId = String(event.active.id);
-    const overId = event.over ? String(event.over.id) : null;
-    if (!overId || activeId === overId) return;
-    const section = sectionForItem(activeId);
-    if (
-      section?.sortMode === "manual" &&
-      section.items.some((item) => item.id === overId)
-    ) {
-      reorderItem(section.id, activeId, overId);
-    }
   }
 
   async function changeDataPath() {
@@ -581,19 +309,6 @@ export function CarbonApp() {
     activeSectionId === ALL_SECTIONS
       ? sections[0]?.name ?? "Inbox"
       : activeName;
-  const itemCount = sourceSections.reduce(
-    (count, section) => count + section.items.length,
-    0,
-  );
-  const contextItem = contextMenu
-    ? sections
-        .flatMap((section) => section.items)
-        .find((item) => item.id === contextMenu.itemId)
-    : undefined;
-  const contextSelectedItems = contextMenu
-    ? itemsForIds(contextMenu.itemIds)
-    : [];
-
   if (!hydrated) {
     return (
       <main className="flex h-full items-center justify-center rounded-2xl border border-line bg-canvas text-muted ring-4 ring-inset ring-line/60">
@@ -636,12 +351,7 @@ export function CarbonApp() {
           notify("You’re on the latest development build.")
         }
         onClearQuery={() => setQuery("")}
-        onClearSourceFilter={() =>
-          setSourceFilters((current) => ({
-            ...current,
-            [activeSectionId]: [],
-          }))
-        }
+        onClearSourceFilter={clearSourceFilter}
         onCopyMarkdown={() => void copyMarkdown()}
         onOpenCommands={() => setCommandOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -654,17 +364,7 @@ export function CarbonApp() {
             ? (sortMode) => setSectionSortMode(activeSection.id, sortMode)
             : undefined
         }
-        onToggleSourceFilter={(key) =>
-          setSourceFilters((current) => {
-            const selected = current[activeSectionId] ?? [];
-            return {
-              ...current,
-              [activeSectionId]: selected.includes(key)
-                ? selected.filter((selectedKey) => selectedKey !== key)
-                : [...selected, key],
-            };
-          })
-        }
+        onToggleSourceFilter={toggleSourceFilter}
       />
 
       <NotesView
@@ -740,70 +440,55 @@ export function CarbonApp() {
         onSubmit={() => void submitDraft()}
       />
 
-      <CommandPalette
-        open={commandOpen}
-        onOpenChange={setCommandOpen}
-        buckets={sections}
-        activeBucketId={activeSectionId}
-        onSelectBucket={setActiveSection}
-        onCreateBucket={createSection}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onSetTheme={(theme) => updateSettings({ theme })}
-      />
-
-      <SettingsDialog
-        open={settingsOpen}
-        onOpenChange={setSettingsOpen}
-        settings={settings}
+      <CarbonOverlays
+        activeSectionId={activeSectionId}
+        commandOpen={commandOpen}
+        contextItem={contextItem}
+        contextMenu={contextMenu}
+        contextSelectedItems={contextSelectedItems}
         dataPath={dataPath}
-        onUpdate={updateSettings}
+        pasteMenu={pasteMenu}
+        sections={sections}
+        settings={settings}
+        settingsOpen={settingsOpen}
+        toasts={toasts}
         onChooseDataPath={changeDataPath}
+        onContextCopy={(asList) => {
+          void copyItems(contextSelectedItems, asList);
+          setContextMenu(null);
+        }}
+        onContextDelete={() => {
+          deleteItems(contextSelectedItems.map((item) => item.id));
+          setContextMenu(null);
+        }}
+        onContextEdit={() => {
+          if (!contextItem) return;
+          startEditing(contextItem);
+          setFocusedItemId(contextItem.id);
+          clearSelected();
+          setContextMenu(null);
+        }}
+        onContextMove={(sectionId) => {
+          moveItems(
+            contextSelectedItems.map((item) => item.id),
+            sectionId,
+          );
+          setContextMenu(null);
+        }}
+        onContextToggle={() => {
+          contextSelectedItems.forEach((item) => toggleItem(item.id));
+          setContextMenu(null);
+        }}
+        onCreateSection={createSection}
+        onOpenCommandChange={setCommandOpen}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onPaste={() => void pasteFromClipboard()}
         onRevealData={() => void revealLocalData()}
+        onSelectSection={setActiveSection}
+        onSettingsOpenChange={setSettingsOpen}
+        onThemeChange={(theme) => updateSettings({ theme })}
+        onUpdateSettings={updateSettings}
       />
-
-      {contextMenu && contextItem && (
-        <ItemContextMenu
-          state={contextMenu}
-          item={contextItem}
-          selectedItems={contextSelectedItems}
-          sections={sections}
-          onCopy={(asList) => {
-            void copyItems(contextSelectedItems, asList);
-            setContextMenu(null);
-          }}
-          onToggle={() => {
-            contextSelectedItems.forEach((item) => toggleItem(item.id));
-            setContextMenu(null);
-          }}
-          onEdit={() => {
-            startEditing(contextItem);
-            setFocusedItemId(contextItem.id);
-            clearSelected();
-            setContextMenu(null);
-          }}
-          onMove={(sectionId) => {
-            moveItems(
-              contextSelectedItems.map((item) => item.id),
-              sectionId,
-            );
-            setContextMenu(null);
-          }}
-          onDelete={() => {
-            deleteItems(contextSelectedItems.map((item) => item.id));
-            setContextMenu(null);
-          }}
-        />
-      )}
-
-      {pasteMenu && (
-        <PasteContextMenu
-          x={pasteMenu.x}
-          y={pasteMenu.y}
-          onPaste={() => void pasteFromClipboard()}
-        />
-      )}
-
-      <ToastRegion toasts={toasts} />
     </main>
   );
 }
