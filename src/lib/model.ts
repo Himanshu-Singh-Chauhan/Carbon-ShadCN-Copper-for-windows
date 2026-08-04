@@ -58,6 +58,7 @@ export interface CarbonSettings {
   showLinkPreviews: boolean;
   showCreatedAt: boolean;
   showItemSources: boolean;
+  showScrollShortcuts?: boolean;
   doubleClickAction: DoubleClickAction;
   capturePlacement: CapturePlacement;
   captureHotkey: string;
@@ -102,6 +103,7 @@ export function createDefaultDocument(): CarbonDocument {
       showLinkPreviews: true,
       showCreatedAt: true,
       showItemSources: true,
+      showScrollShortcuts: true,
       doubleClickAction: "copy",
       capturePlacement: "top",
       captureHotkey: "CommandOrControl+Shift+C",
@@ -232,6 +234,7 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       showLinkPreviews: input.settings?.showLinkPreviews !== false,
       showCreatedAt: input.settings?.showCreatedAt !== false,
       showItemSources: input.settings?.showItemSources !== false,
+      showScrollShortcuts: input.settings?.showScrollShortcuts !== false,
       doubleClickAction:
         input.settings?.doubleClickAction === "edit" ? "edit" : "copy",
       capturePlacement:

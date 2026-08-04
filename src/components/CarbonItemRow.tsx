@@ -1,6 +1,6 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CheckmarkCircle02Icon, Drag01Icon } from "@hugeicons/core-free-icons";
+import { CheckIcon, Drag01Icon } from "@hugeicons/core-free-icons";
 import type { DragEvent, MouseEvent } from "react";
 import { formatAddedAt, formatExactAddedAt } from "../lib/dates";
 import { prepareTextDrag, startImageDrag } from "../lib/dragOut";
@@ -28,7 +28,7 @@ interface CarbonItemRowProps {
   onTaskToggle: (taskIndex: number, checked: boolean) => void;
   onSelect: (event: MouseEvent) => void;
   onContextMenu: (event: MouseEvent) => void;
-  onEdit: () => void;
+  onEdit: (forceEdit?: boolean) => void;
   onOpenImage: (index: number) => void;
 }
 
@@ -94,7 +94,10 @@ export function CarbonItemRow({
       )}
       onClick={onSelect}
       onContextMenu={onContextMenu}
-      onDoubleClick={onEdit}
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        onEdit(false);
+      }}
       data-item-id={item.id}
       data-note-card
     >
@@ -114,7 +117,7 @@ export function CarbonItemRow({
         }}
       >
         {item.completed && (
-          <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.6} />
+          <Icon icon={CheckIcon} size={11} strokeWidth={3} />
         )}
       </button>
       <div
@@ -203,7 +206,7 @@ export function CarbonItemRow({
       {!dragDisabled && (
         <button
           type="button"
-          className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-lg text-faint opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-surface-hover hover:text-muted focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/35 active:cursor-grabbing group-hover:opacity-100"
+          className="mt-0.5 inline-flex size-5 shrink-0 cursor-grab items-center justify-center rounded-md text-faint opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-surface-hover hover:text-muted focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/35 active:cursor-grabbing group-hover:opacity-100"
           aria-label="Drag to reorder"
           data-no-item-drag
           draggable={false}
@@ -211,7 +214,7 @@ export function CarbonItemRow({
           {...attributes}
           {...listeners}
         >
-          <Icon icon={Drag01Icon} size={15} />
+          <Icon icon={Drag01Icon} size={13} />
         </button>
       )}
     </article>

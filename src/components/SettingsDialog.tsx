@@ -128,6 +128,7 @@ export function SettingsDialog({
                 aria-label="Show capture source"
               />
             </div>
+
             <div className="my-3 h-px bg-line" />
             <div>
               <p className="text-sm font-medium text-ink">New captures</p>

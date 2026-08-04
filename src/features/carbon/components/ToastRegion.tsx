@@ -16,7 +16,7 @@ export function ToastRegion({
 }) {
   return (
     <div
-      className="pointer-events-none fixed bottom-4 left-1/2 z-[90] flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 flex-col items-center gap-2"
+      className="pointer-events-none fixed bottom-16 left-1/2 z-[90] flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 flex-col items-center gap-2"
       aria-live="polite"
     >
       {toasts.map((toast) => (

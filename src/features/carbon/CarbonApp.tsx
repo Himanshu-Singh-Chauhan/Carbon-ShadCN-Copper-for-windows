@@ -481,8 +481,8 @@ export function CarbonApp() {
         onClearQuery={() => setQuery("")}
         onContextMenu={openContextMenu}
         onDragEnd={handleDragEnd}
-        onEdit={(item) => {
-          if (settings.doubleClickAction === "copy") {
+        onEdit={(item, forceEdit) => {
+          if (!forceEdit && settings.doubleClickAction === "copy") {
             void copyItems([item]);
             return;
           }
@@ -544,6 +544,7 @@ export function CarbonApp() {
         existingAttachments={existingAttachments}
         inputRef={inputRef}
         saving={savingDraft}
+        windowDropActive={dropActive}
         onCancelEditing={cancelEditing}
         onDraftChange={setDraft}
         onDropImages={(data) => void addDroppedImages(data)}

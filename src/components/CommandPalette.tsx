@@ -3,7 +3,7 @@ import {
   CheckmarkCircle02Icon,
   Delete02Icon,
   File01Icon,
-  Folder02Icon,
+  BucketIcon,
   Moon02Icon,
   Search01Icon,
   Settings02Icon,
@@ -74,7 +74,7 @@ export function CommandPalette({
           bucket.items.length === 1 ? "item" : "items"
         }`,
         group: "Buckets" as const,
-        icon: Folder02Icon,
+        icon: BucketIcon,
         active: activeBucketId === bucket.id,
         bucket,
         run: () => onSelectBucket(bucket.id),

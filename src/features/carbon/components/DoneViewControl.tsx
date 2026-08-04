@@ -31,11 +31,23 @@ export function DoneViewControl({
   onDeleteAll: () => void;
 }) {
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
+      {mode === "done" && doneCount > 0 && (
+        <button
+          type="button"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-lg border border-line bg-surface-raised text-muted outline-none transition-colors hover:border-danger/30 hover:bg-danger-soft hover:text-danger focus-visible:ring-2 focus-visible:ring-danger/30"
+          onClick={onDeleteAll}
+          aria-label="Delete all Done items"
+          title="Delete all Done items"
+        >
+          <Icon icon={Delete02Icon} size={13} />
+        </button>
+      )}
+
       <button
         type="button"
         className={cn(
-          "inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border px-2.5 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/35",
+          "inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border px-2 text-xs font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/35",
           mode === "active" &&
             "border-line bg-surface-raised text-muted hover:border-line-strong hover:bg-surface-hover hover:text-ink",
           mode === "all" &&
@@ -50,7 +62,7 @@ export function DoneViewControl({
       >
         <Icon
           icon={mode === "all" ? ViewIcon : CheckmarkCircle02Icon}
-          size={14}
+          size={13}
           strokeWidth={2.2}
         />
         <span>{mode === "all" ? "All" : "Done"}</span>
@@ -63,18 +75,6 @@ export function DoneViewControl({
           {doneCount}
         </span>
       </button>
-
-      {mode === "done" && doneCount > 0 && (
-        <button
-          type="button"
-          className="inline-flex size-8 cursor-pointer items-center justify-center rounded-xl border border-line bg-surface-raised text-muted outline-none transition-colors hover:border-danger/30 hover:bg-danger-soft hover:text-danger focus-visible:ring-2 focus-visible:ring-danger/30"
-          onClick={onDeleteAll}
-          aria-label="Delete all Done items"
-          title="Delete all Done items"
-        >
-          <Icon icon={Delete02Icon} size={14} />
-        </button>
-      )}
     </div>
   );
 }

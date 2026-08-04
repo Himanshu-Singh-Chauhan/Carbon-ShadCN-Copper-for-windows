@@ -15,6 +15,7 @@ import type {
   DoneViewMode,
   NoteSortMode,
 } from "../../../lib/model";
+import { useRightClickDragScroll } from "../../../hooks/useRightClickDragScroll";
 import { NoteSectionGroup } from "./notes-view/NoteSectionGroup";
 import {
   NoSearchResults,
@@ -39,7 +40,7 @@ export type NotesViewProps = {
   onClearQuery: () => void;
   onContextMenu: (event: MouseEvent, itemId: string) => void;
   onDragEnd: (event: DragEndEvent) => void;
-  onEdit: (item: CarbonItem) => void;
+  onEdit: (item: CarbonItem, forceEdit?: boolean) => void;
   onFocusInput: () => void;
   onOpenCommands: () => void;
   onOpenImage: (item: CarbonItem, index: number) => void;
@@ -80,6 +81,7 @@ export function NotesView({
   onToggle,
 }: NotesViewProps) {
   const [now, setNow] = useState(() => Date.now());
+  const containerRef = useRightClickDragScroll<HTMLElement>();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -141,7 +143,8 @@ export function NotesView({
 
   return (
     <section
-      className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-3 pb-4 pt-1 [scrollbar-color:var(--line-strong)_transparent] [scrollbar-width:thin]"
+      ref={containerRef}
+      className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-scroll pl-3 pr-[2px] pb-14 pt-1"
       aria-label="Carbon notes"
       data-notes-scroll
     >
