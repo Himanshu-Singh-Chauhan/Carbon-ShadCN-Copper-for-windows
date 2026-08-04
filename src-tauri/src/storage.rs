@@ -25,12 +25,19 @@ static ITEM_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 struct PendingItem {
     section_id: String,
     item: Value,
+    at_top: bool,
+}
+
+#[derive(Clone)]
+struct PendingMove {
+    destination_id: String,
+    at_top: bool,
 }
 
 #[derive(Default)]
 struct PendingDocumentChanges {
     items: HashMap<String, PendingItem>,
-    moves: HashMap<String, String>,
+    moves: HashMap<String, PendingMove>,
 }
 
 #[derive(Default)]
@@ -44,6 +51,7 @@ pub(crate) struct SavedCapture {
     pub(crate) item: Value,
     pub(crate) section_id: String,
     pub(crate) buckets: Vec<CaptureBucket>,
+    pub(crate) placement: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -78,6 +86,7 @@ fn default_document() -> Value {
             "showCreatedAt": true,
             "showItemSources": true,
             "doubleClickAction": "copy",
+            "capturePlacement": "top",
             "captureHotkey": DEFAULT_CAPTURE_HOTKEY,
             "showWindowHotkey": DEFAULT_SHOW_WINDOW_HOTKEY
         }
@@ -143,7 +152,7 @@ fn item_section_id(document: &Value, item_id: &str) -> Option<String> {
     })
 }
 
-fn append_item(document: &mut Value, section_id: &str, item: Value) -> bool {
+fn insert_item(document: &mut Value, section_id: &str, item: Value, at_top: bool) -> bool {
     let Some(target) = sections_mut(document).and_then(|sections| {
         sections
             .iter_mut()
@@ -154,11 +163,28 @@ fn append_item(document: &mut Value, section_id: &str, item: Value) -> bool {
     let Some(items) = target.get_mut("items").and_then(Value::as_array_mut) else {
         return false;
     };
-    items.push(item);
+    if at_top {
+        items.insert(0, item);
+    } else {
+        items.push(item);
+    }
     true
 }
 
-fn move_item(document: &mut Value, item_id: &str, destination_id: &str) -> bool {
+fn capture_placement(document: &Value) -> &'static str {
+    if document
+        .get("settings")
+        .and_then(|settings| settings.get("capturePlacement"))
+        .and_then(Value::as_str)
+        == Some("bottom")
+    {
+        "bottom"
+    } else {
+        "top"
+    }
+}
+
+fn move_item(document: &mut Value, item_id: &str, destination_id: &str, at_top: bool) -> bool {
     let Some(all_sections) = sections_mut(document) else {
         return false;
     };
@@ -194,7 +220,11 @@ fn move_item(document: &mut Value, item_id: &str, destination_id: &str) -> bool 
     let Some(items) = destination.get_mut("items").and_then(Value::as_array_mut) else {
         return false;
     };
-    items.push(item);
+    if at_top {
+        items.insert(0, item);
+    } else {
+        items.push(item);
+    }
     true
 }
 
@@ -221,19 +251,27 @@ fn merge_pending_changes(
             if let Some(destination) = destination {
                 pending_item.section_id = destination;
             }
-            let _ = append_item(
+            let _ = insert_item(
                 document,
                 &pending_item.section_id,
                 pending_item.item.clone(),
+                pending_item.at_top,
             );
             true
         }
     });
-    pending.moves.retain(|item_id, destination_id| {
-        if item_section_id(document, item_id).as_deref() == Some(destination_id) {
+    pending.moves.retain(|item_id, pending_move| {
+        if item_section_id(document, item_id).as_deref()
+            == Some(pending_move.destination_id.as_str())
+        {
             !acknowledge_frontend_state
         } else {
-            let _ = move_item(document, item_id, destination_id);
+            let _ = move_item(
+                document,
+                item_id,
+                &pending_move.destination_id,
+                pending_move.at_top,
+            );
             true
         }
     });
@@ -401,6 +439,8 @@ pub(crate) fn append_captured_item(
         document = default_document();
     }
     merge_pending_changes(&mut document, &mut pending, false);
+    let placement = capture_placement(&document).to_string();
+    let at_top = placement == "top";
     let section_id = target_section(&document)
         .ok_or_else(|| "No destination bucket is available.".to_string())?;
     let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -418,7 +458,7 @@ pub(crate) fn append_captured_item(
             .expect("captured items are JSON objects")
             .insert("source".to_string(), json!(source));
     }
-    if !append_item(&mut document, &section_id, item.clone()) {
+    if !insert_item(&mut document, &section_id, item.clone(), at_top) {
         return Err("The destination bucket could not accept the capture.".to_string());
     }
     write_document(&path, &document)?;
@@ -427,12 +467,14 @@ pub(crate) fn append_captured_item(
         PendingItem {
             section_id: section_id.clone(),
             item: item.clone(),
+            at_top,
         },
     );
     Ok(SavedCapture {
         item,
         section_id,
         buckets: capture_buckets(&document),
+        placement,
     })
 }
 
@@ -447,17 +489,29 @@ pub(crate) fn move_captured_item(
     let path = resolve_data_path(&app)?;
     let mut document = read_document(&path)?;
     merge_pending_changes(&mut document, &mut pending, false);
+    let placement = capture_placement(&document).to_string();
+    let at_top = placement == "top";
     if item_section_id(&document, &item_id).as_deref() != Some(bucket_id.as_str())
-        && !move_item(&mut document, &item_id, &bucket_id)
+        && !move_item(&mut document, &item_id, &bucket_id, at_top)
     {
         return Err("The captured note or destination bucket is unavailable.".to_string());
     }
     write_document(&path, &document)?;
-    pending.moves.insert(item_id.clone(), bucket_id.clone());
+    pending.moves.insert(
+        item_id.clone(),
+        PendingMove {
+            destination_id: bucket_id.clone(),
+            at_top,
+        },
+    );
     let _ = app.emit_to(
         "main",
         "native-captured-item-moved",
-        json!({ "itemId": item_id, "bucketId": bucket_id }),
+        json!({
+            "itemId": item_id,
+            "bucketId": bucket_id,
+            "placement": placement
+        }),
     );
     Ok(())
 }
@@ -715,6 +769,7 @@ mod tests {
             PendingItem {
                 section_id: "inbox".to_string(),
                 item: captured.clone(),
+                at_top: true,
             },
         );
         let mut stale = document_with_sections();
@@ -733,11 +788,15 @@ mod tests {
     #[test]
     fn pending_bucket_move_is_enforced_until_frontend_reflects_it() {
         let mut document = document_with_sections();
-        assert!(append_item(&mut document, "inbox", item("captured")));
+        assert!(insert_item(&mut document, "inbox", item("captured"), false));
         let mut pending = PendingDocumentChanges::default();
-        pending
-            .moves
-            .insert("captured".to_string(), "archive".to_string());
+        pending.moves.insert(
+            "captured".to_string(),
+            PendingMove {
+                destination_id: "archive".to_string(),
+                at_top: true,
+            },
+        );
 
         merge_pending_changes(&mut document, &mut pending, true);
         assert_eq!(
@@ -748,5 +807,21 @@ mod tests {
 
         merge_pending_changes(&mut document, &mut pending, true);
         assert!(!pending.moves.contains_key("captured"));
+    }
+
+    #[test]
+    fn captured_items_can_be_inserted_at_either_edge() {
+        let mut document = document_with_sections();
+        assert!(insert_item(&mut document, "inbox", item("middle"), false));
+        assert!(insert_item(&mut document, "inbox", item("top"), true));
+        assert!(insert_item(&mut document, "inbox", item("bottom"), false));
+
+        let ids = sections(&document).unwrap()[0]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|item| item.get("id").and_then(Value::as_str))
+            .collect::<Vec<_>>();
+        assert_eq!(ids, vec!["top", "middle", "bottom"]);
     }
 }

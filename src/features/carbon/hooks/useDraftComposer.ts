@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ClipboardEvent,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CarbonAttachment,
   CarbonItem,
@@ -57,7 +52,7 @@ export function useDraftComposer({
     const input = inputRef.current;
     if (!input) return;
     input.style.height = "0px";
-    input.style.height = `${Math.min(input.scrollHeight, 124)}px`;
+    input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
   }, [draft]);
 
   function releaseDraftImages() {
@@ -87,17 +82,16 @@ export function useDraftComposer({
     });
   }
 
-  async function addPastedImages(event: ClipboardEvent<HTMLTextAreaElement>) {
-    const files = imageFilesFromClipboard(event.clipboardData);
-    if (files.length === 0) return;
-    event.preventDefault();
-    try {
-      const images = await Promise.all(files.map(createDraftImage));
-      setDraftImages((current) => [...current, ...images]);
-      requestAnimationFrame(() => inputRef.current?.focus());
-    } catch {
-      notify("Carbon couldn’t read that image.", "error");
-    }
+  function addPastedImages(data: DataTransfer) {
+    const files = imageFilesFromClipboard(data);
+    if (files.length === 0) return false;
+    void Promise.all(files.map(createDraftImage))
+      .then((images) => {
+        setDraftImages((current) => [...current, ...images]);
+        requestAnimationFrame(() => inputRef.current?.focus());
+      })
+      .catch(() => notify("Carbon couldn’t read that image.", "error"));
+    return true;
   }
 
   async function addDroppedImages(data: DataTransfer) {
@@ -128,8 +122,8 @@ export function useDraftComposer({
     inputRef.current?.focus();
   }
 
-  async function submitDraft() {
-    const text = draft.trim();
+  async function submitDraft(currentMarkdown?: string) {
+    const text = (currentMarkdown ?? draft).trim();
     const isEditing = editingItemId !== null;
     if (
       (!isEditing &&

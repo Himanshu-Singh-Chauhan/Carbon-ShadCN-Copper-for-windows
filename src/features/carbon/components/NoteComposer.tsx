@@ -5,8 +5,12 @@ import {
   CircleIcon,
   FileEditIcon,
   InboxIcon,
+  TextIcon,
+  ViewIcon,
 } from "@hugeicons/core-free-icons";
 import {
+  useEffect,
+  useRef,
   useState,
   type ClipboardEvent,
   type DragEvent,
@@ -14,6 +18,7 @@ import {
   type RefObject,
 } from "react";
 import { AssetImage } from "../../../components/AssetImage";
+import { MarkdownContent } from "../../../components/MarkdownContent";
 import { Icon } from "../../../components/ui/icon";
 import type { CarbonAttachment } from "../../../lib/model";
 import { cn } from "../../../lib/utils";
@@ -50,18 +55,48 @@ export function NoteComposer({
   onDropImages: (data: DataTransfer) => void;
   onOpenCommands: () => void;
   onOpenImage: (index: number) => void;
-  onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  onPaste: (data: DataTransfer) => boolean;
   onRemoveDraftImage: (id: string) => void;
   onRemoveExistingImage: (id: string) => void;
-  onSubmit: () => void;
+  onSubmit: (value?: string) => void;
 }) {
   const [dropActive, setDropActive] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
   const attachmentCount = existingAttachments.length + draftImages.length;
   const hasContent = editing || Boolean(draft.trim() || attachmentCount);
   const removeButtonStyles =
     "absolute right-1 top-1 inline-flex size-5 cursor-pointer items-center justify-center rounded-md bg-black/60 text-white opacity-0 outline-none backdrop-blur-sm transition-opacity hover:bg-black/80 focus-visible:opacity-100 group-hover:opacity-100";
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+  useEffect(() => {
+    if (!draft && attachmentCount === 0) setPreviewing(false);
+  }, [attachmentCount, draft]);
+
+  useEffect(() => {
+    setPreviewing(false);
+  }, [editing]);
+
+  function setPreviewMode(preview: boolean) {
+    setPreviewing(preview);
+    requestAnimationFrame(() => {
+      if (preview) previewRef.current?.focus();
+      else {
+        const input = inputRef.current;
+        if (!input) return;
+        input.style.height = "0px";
+        input.style.height = `${Math.min(input.scrollHeight, 192)}px`;
+        input.focus();
+      }
+    });
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Tab") {
+      event.preventDefault();
+      setPreviewMode(!previewing);
+      return;
+    }
+    if (previewing) return;
     if (event.key === "Escape" && editing) {
       event.preventDefault();
       onCancelEditing();
@@ -71,6 +106,10 @@ export function NoteComposer({
       event.preventDefault();
       onSubmit();
     }
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    if (onPaste(event.clipboardData)) event.preventDefault();
   }
 
   function handleDragEnter(event: DragEvent<HTMLElement>) {
@@ -98,34 +137,10 @@ export function NoteComposer({
 
   function handleDrop(event: DragEvent<HTMLElement>) {
     setDropActive(false);
-    if (requestsImageDrop(event.dataTransfer)) {
-      event.preventDefault();
-      event.stopPropagation();
-      onDropImages(event.dataTransfer);
-      return;
-    }
-
-    const droppedText =
-      event.dataTransfer.getData("text/plain") ||
-      event.dataTransfer
-        .getData("text/uri-list")
-        .split(/\r?\n/)
-        .find((line) => line.trim() && !line.trim().startsWith("#")) ||
-      "";
-    if (!droppedText) return;
-
+    if (!requestsImageDrop(event.dataTransfer)) return;
     event.preventDefault();
     event.stopPropagation();
-    const input = inputRef.current;
-    const start = input?.selectionStart ?? draft.length;
-    const end = input?.selectionEnd ?? start;
-    const nextDraft = `${draft.slice(0, start)}${droppedText}${draft.slice(end)}`;
-    const nextCaret = start + droppedText.length;
-    onDraftChange(nextDraft);
-    requestAnimationFrame(() => {
-      input?.focus();
-      input?.setSelectionRange(nextCaret, nextCaret);
-    });
+    onDropImages(event.dataTransfer);
   }
 
   return (
@@ -135,7 +150,7 @@ export function NoteComposer({
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
-      onDrop={handleDrop}
+      onDropCapture={handleDrop}
     >
       {dropActive && (
         <div className="pointer-events-none absolute -top-7 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg border border-accent/35 bg-surface-raised px-2.5 py-1.5 text-xs font-medium text-ink shadow-panel">
@@ -235,25 +250,62 @@ export function NoteComposer({
             icon={CircleIcon}
             size={19}
           />
-          <textarea
-            ref={inputRef}
-            className="max-h-32 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-5 text-ink outline-none placeholder:text-faint"
-            value={draft}
-            rows={1}
-            placeholder={
-              editing
-                ? "Edit this item or paste more images…"
-                : "Add a note or paste an image…"
+          {previewing ? (
+            <div
+              ref={previewRef}
+              className="max-h-48 min-h-6 min-w-0 flex-1 overflow-y-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent/25"
+              tabIndex={0}
+              aria-label="Markdown preview"
+              onKeyDown={handleKeyDown}
+            >
+              {draft.trim() ? (
+                <MarkdownContent markdown={draft} />
+              ) : (
+                <span className="text-sm leading-[1.55] text-faint">
+                  Nothing to preview
+                </span>
+              )}
+            </div>
+          ) : (
+            <textarea
+              ref={inputRef}
+              className="max-h-48 min-h-6 min-w-0 flex-1 resize-none overflow-y-auto bg-transparent text-sm leading-5 text-ink caret-ink outline-none placeholder:text-faint"
+              value={draft}
+              rows={1}
+              placeholder={
+                editing
+                  ? "Edit this item or paste more images…"
+                  : "Add a note or paste an image…"
+              }
+              onChange={(event) => onDraftChange(event.target.value)}
+              onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
+            />
+          )}
+          <button
+            type="button"
+            className={cn(
+              "inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl border outline-none transition-colors focus-visible:ring-2 focus-visible:ring-accent/35",
+              previewing
+                ? "border-accent/45 bg-accent-soft text-ink"
+                : "border-line bg-surface text-muted hover:border-line-strong hover:bg-surface-hover hover:text-ink",
+            )}
+            onClick={() => setPreviewMode(!previewing)}
+            aria-label={previewing ? "Edit raw Markdown" : "Preview Markdown"}
+            aria-pressed={previewing}
+            title={
+              previewing
+                ? "Edit raw Markdown (Tab)"
+                : "Preview Markdown (Tab)"
             }
-            onChange={(event) => onDraftChange(event.target.value)}
-            onPaste={onPaste}
-            onKeyDown={handleKeyDown}
-          />
+          >
+            <Icon icon={previewing ? TextIcon : ViewIcon} size={16} />
+          </button>
           {hasContent && (
             <button
               type="button"
               className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-xl bg-accent text-accent-foreground shadow-sm outline-none transition-colors hover:bg-accent-strong focus-visible:ring-2 focus-visible:ring-accent/35 disabled:cursor-default disabled:opacity-45"
-              onClick={onSubmit}
+              onClick={() => onSubmit()}
               disabled={saving}
               aria-label={editing ? "Save changes" : "Add item"}
             >

@@ -196,7 +196,8 @@ pub(crate) fn capture_in_background(app: AppHandle) {
                                 "native-captured-item-added",
                                 json!({
                                     "item": saved.item.clone(),
-                                    "sectionId": saved.section_id.clone()
+                                    "sectionId": saved.section_id.clone(),
+                                    "placement": saved.placement.clone()
                                 }),
                             );
                             let pending = app.state::<PendingCaptureNotifications>();

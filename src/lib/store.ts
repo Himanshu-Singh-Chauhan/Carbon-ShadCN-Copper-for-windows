@@ -3,6 +3,7 @@ import { create } from "zustand";
 import {
   ALL_SECTIONS,
   type CarbonAttachment,
+  type CapturePlacement,
   type CarbonDocument,
   type CarbonItem,
   type CarbonItemSource,
@@ -26,7 +27,11 @@ interface CarbonState extends CarbonDocument {
     attachments?: CarbonAttachment[],
     source?: CarbonItemSource,
   ) => AddedItem | undefined;
-  applyNativeItem: (item: CarbonItem, sectionId: string) => void;
+  applyNativeItem: (
+    item: CarbonItem,
+    sectionId: string,
+    placement: CapturePlacement,
+  ) => void;
   createSection: (name: string) => void;
   renameSection: (sectionId: string, name: string) => void;
   deleteSection: (sectionId: string) => void;
@@ -38,7 +43,11 @@ interface CarbonState extends CarbonDocument {
     attachments?: CarbonAttachment[],
   ) => void;
   deleteItems: (ids?: string[]) => void;
-  moveItems: (itemIds: string[], sectionId: string) => void;
+  moveItems: (
+    itemIds: string[],
+    sectionId: string,
+    placement?: CapturePlacement,
+  ) => void;
   reorderItem: (sectionId: string, activeId: string, overId: string) => void;
   setSectionSortMode: (sectionId: string, sortMode: NoteSortMode) => void;
   setSelected: (ids: string[]) => void;
@@ -111,7 +120,7 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
     return { item, sectionId };
   },
 
-  applyNativeItem: (item, sectionId) =>
+  applyNativeItem: (item, sectionId, placement) =>
     set((state) => {
       if (
         state.sections.some((section) =>
@@ -123,7 +132,13 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
       return {
         sections: state.sections.map((section) =>
           section.id === sectionId
-            ? { ...section, items: [...section.items, item] }
+            ? {
+                ...section,
+                items:
+                  placement === "top"
+                    ? [item, ...section.items]
+                    : [...section.items, item],
+              }
             : section,
         ),
       };
@@ -225,7 +240,7 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
       };
     }),
 
-  moveItems: (itemIds, destinationId) =>
+  moveItems: (itemIds, destinationId, placement = "bottom") =>
     set((state) => {
       if (!state.sections.some((section) => section.id === destinationId)) {
         return state;
@@ -239,10 +254,15 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
           ...section,
           items:
             section.id === destinationId
-              ? [
-                  ...section.items.filter((item) => !movingIds.has(item.id)),
-                  ...moving,
-                ]
+              ? placement === "top"
+                ? [
+                    ...moving,
+                    ...section.items.filter((item) => !movingIds.has(item.id)),
+                  ]
+                : [
+                    ...section.items.filter((item) => !movingIds.has(item.id)),
+                    ...moving,
+                  ]
               : section.items.filter((item) => !movingIds.has(item.id)),
         })),
         selectedIds: [],

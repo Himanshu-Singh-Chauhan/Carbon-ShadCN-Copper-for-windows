@@ -1,4 +1,6 @@
 import {
+  ArrowDown01Icon,
+  ArrowUp01Icon,
   Copy01Icon,
   FileEditIcon,
   FolderOpenIcon,
@@ -123,6 +125,48 @@ export function SettingsDialog({
                 }
                 aria-label="Show capture source"
               />
+            </div>
+            <div className="my-3 h-px bg-line" />
+            <div>
+              <p className="text-sm font-medium text-ink">New captures</p>
+              <p className="mt-0.5 text-xs leading-4 text-muted">
+                Choose where shortcut captures appear.
+              </p>
+              <div
+                className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-surface-hover p-1"
+                role="radiogroup"
+                aria-label="New capture placement"
+              >
+                {[
+                  { value: "top" as const, label: "Top", icon: ArrowUp01Icon },
+                  {
+                    value: "bottom" as const,
+                    label: "Bottom",
+                    icon: ArrowDown01Icon,
+                  },
+                ].map((placement) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={
+                      settings.capturePlacement === placement.value
+                    }
+                    className={cn(
+                      "inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border text-sm font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent/35",
+                      settings.capturePlacement === placement.value
+                        ? "border-line bg-surface-raised text-ink shadow-sm"
+                        : "border-transparent text-muted hover:text-ink",
+                    )}
+                    key={placement.value}
+                    onClick={() =>
+                      onUpdate({ capturePlacement: placement.value })
+                    }
+                  >
+                    <Icon icon={placement.icon} size={15} />
+                    {placement.label}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="my-3 h-px bg-line" />
             <div>

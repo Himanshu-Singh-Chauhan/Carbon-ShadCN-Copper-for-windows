@@ -3,6 +3,7 @@ import { createId } from "./utils";
 export type Theme = "light" | "dark";
 export type NoteSortMode = "manual" | "created-desc" | "created-asc";
 export type DoubleClickAction = "copy" | "edit";
+export type CapturePlacement = "top" | "bottom";
 
 export interface CarbonAttachment {
   id: string;
@@ -51,6 +52,7 @@ export interface CarbonSettings {
   showCreatedAt: boolean;
   showItemSources: boolean;
   doubleClickAction: DoubleClickAction;
+  capturePlacement: CapturePlacement;
   captureHotkey: string;
   showWindowHotkey: string;
   windowBounds?: WindowBounds;
@@ -86,6 +88,7 @@ export function createDefaultDocument(): CarbonDocument {
       showCreatedAt: true,
       showItemSources: true,
       doubleClickAction: "copy",
+      capturePlacement: "top",
       captureHotkey: "CommandOrControl+Shift+C",
       showWindowHotkey: "CommandOrControl+Shift+Space",
     },
@@ -194,6 +197,8 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       showItemSources: input.settings?.showItemSources !== false,
       doubleClickAction:
         input.settings?.doubleClickAction === "edit" ? "edit" : "copy",
+      capturePlacement:
+        input.settings?.capturePlacement === "bottom" ? "bottom" : "top",
       captureHotkey:
         typeof input.settings?.captureHotkey === "string" &&
         input.settings.captureHotkey.trim()

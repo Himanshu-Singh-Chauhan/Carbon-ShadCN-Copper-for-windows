@@ -5,12 +5,12 @@ import type { DragEvent, MouseEvent } from "react";
 import { formatAddedAt, formatExactAddedAt } from "../lib/dates";
 import { prepareTextDrag, startImageDrag } from "../lib/dragOut";
 import type { CarbonItem } from "../lib/model";
-import { extractHttpUrls, splitTextByLinks } from "../lib/links";
-import { openExternalUrl } from "../lib/native";
+import { extractHttpUrls } from "../lib/links";
 import { cn } from "../lib/utils";
 import { AssetImage } from "./AssetImage";
 import { ItemSourceBadge } from "./ItemSourceBadge";
 import { LinkPreviewCard } from "./LinkPreviewCard";
+import { MarkdownContent } from "./MarkdownContent";
 import { Icon } from "./ui/icon";
 
 interface CarbonItemRowProps {
@@ -28,66 +28,6 @@ interface CarbonItemRowProps {
   onContextMenu: (event: MouseEvent) => void;
   onEdit: () => void;
   onOpenImage: (index: number) => void;
-}
-
-function HighlightedText({
-  text,
-  query,
-}: {
-  text: string;
-  query: string;
-}) {
-  if (!query.trim()) return text;
-  const escaped = query.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const parts = text.split(new RegExp(`(${escaped})`, "ig"));
-  return (
-    <>
-      {parts.map((part, index) =>
-        part.toLowerCase() === query.trim().toLowerCase() ? (
-          <mark
-            className="rounded bg-accent-soft px-0.5 text-ink"
-            key={`${part}-${index}`}
-          >
-            {part}
-          </mark>
-        ) : (
-          part
-        ),
-      )}
-    </>
-  );
-}
-
-function RichText({ text, query }: { text: string; query: string }) {
-  return (
-    <>
-      {splitTextByLinks(text).map((part, index) =>
-        part.kind === "link" ? (
-          <a
-            className="cursor-pointer text-accent underline decoration-accent/35 underline-offset-2 outline-none hover:decoration-accent focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-accent/35"
-            href={part.value}
-            key={`${part.value}-${index}`}
-            rel="noreferrer"
-            target="_blank"
-            onClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              void openExternalUrl(part.value);
-            }}
-            onDoubleClick={(event) => event.stopPropagation()}
-          >
-            <HighlightedText text={part.value} query={query} />
-          </a>
-        ) : (
-          <HighlightedText
-            key={`${part.value}-${index}`}
-            text={part.value}
-            query={query}
-          />
-        ),
-      )}
-    </>
-  );
 }
 
 export function CarbonItemRow({
@@ -228,14 +168,11 @@ export function CarbonItemRow({
           </div>
         )}
         {item.text && (
-          <p
-            className={cn(
-              "m-0 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-sm leading-[1.55] text-ink",
-              item.completed && "line-through decoration-faint/70",
-            )}
-          >
-            <RichText text={item.text} query={searchQuery} />
-          </p>
+          <MarkdownContent
+            markdown={item.text}
+            query={searchQuery}
+            completed={item.completed}
+          />
         )}
         {previewUrl && <LinkPreviewCard url={previewUrl} />}
         {showItemSources && item.source && (

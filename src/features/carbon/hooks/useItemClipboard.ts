@@ -15,6 +15,13 @@ function itemsForIds(sections: CarbonSection[], ids: string[]) {
   );
 }
 
+function indentMarkdownContinuation(text: string, spaces: number) {
+  const indentation = " ".repeat(spaces);
+  return text
+    .replace(/\r\n?|\u2028|\u2029/g, "\n")
+    .replace(/\n/g, `\n${indentation}`);
+}
+
 export function useItemClipboard({
   notify,
   sections,
@@ -41,7 +48,10 @@ export function useItemClipboard({
         ? [
             items
               .filter((item) => item.text)
-              .map((item) => `- ${item.text.replace(/\n/g, "\n  ")}`)
+              .map(
+                (item) =>
+                  `- ${indentMarkdownContinuation(item.text, 2)}`,
+              )
               .join("\n"),
           ].filter(Boolean)
         : items.map((item) => item.text).filter(Boolean);
@@ -106,7 +116,10 @@ export function useItemClipboard({
       .map(
         (section) =>
           `# ${section.name}\n\n${section.items
-            .map((item) => `- [${item.completed ? "x" : " "}] ${item.text}`)
+            .map(
+              (item) =>
+                `- [${item.completed ? "x" : " "}] ${indentMarkdownContinuation(item.text, 4)}`,
+            )
             .join("\n")}`,
       )
       .join("\n\n");

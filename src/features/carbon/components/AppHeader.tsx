@@ -116,6 +116,32 @@ export function AppHeader({
         </label>
 
         <button
+          className={
+            settings.alwaysOnTop
+              ? "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-accent/45 bg-accent-soft text-ink shadow-sm outline-none transition-colors hover:border-accent/65 focus-visible:ring-2 focus-visible:ring-accent/35"
+              : "inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line bg-surface-raised text-muted shadow-sm outline-none transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+          }
+          type="button"
+          onClick={() => onAlwaysOnTopChange(!settings.alwaysOnTop)}
+          aria-label={
+            settings.alwaysOnTop
+              ? "Turn off always on top"
+              : "Turn on always on top"
+          }
+          aria-pressed={settings.alwaysOnTop}
+          title={
+            settings.alwaysOnTop
+              ? "Always on top is on"
+              : "Always on top is off"
+          }
+        >
+          <Icon
+            icon={settings.alwaysOnTop ? PinIcon : PinOffIcon}
+            size={18}
+          />
+        </button>
+
+        <button
           className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line bg-surface-raised text-muted shadow-sm outline-none transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
           type="button"
           onClick={onMinimizeToTray}

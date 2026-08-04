@@ -452,10 +452,10 @@ export function CarbonApp() {
         onDropImages={(data) => void addDroppedImages(data)}
         onOpenCommands={() => setCommandOpen(true)}
         onOpenImage={(index) => void openComposerImage(index)}
-        onPaste={(event) => void addPastedImages(event)}
+        onPaste={addPastedImages}
         onRemoveDraftImage={removeDraftImage}
         onRemoveExistingImage={removeExistingAttachment}
-        onSubmit={() => void submitDraft()}
+        onSubmit={(value) => void submitDraft(value)}
       />
 
       {dropActive && <DropOverlay />}

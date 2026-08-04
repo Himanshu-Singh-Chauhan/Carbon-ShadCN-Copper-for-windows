@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 import type {
+  CapturePlacement,
   CarbonItem,
   CarbonSettings,
   WindowBounds,
@@ -136,20 +137,36 @@ export function useWindowIntegration({
     if (!hydrated || !isTauri()) return;
     const cleanups: (() => void)[] = [];
     void Promise.all([
-      listen<{ item: CarbonItem; sectionId: string }>(
+      listen<{
+        item: CarbonItem;
+        sectionId: string;
+        placement: CapturePlacement;
+      }>(
         "native-captured-item-added",
         ({ payload }) => {
           useCarbonStore
             .getState()
-            .applyNativeItem(payload.item, payload.sectionId);
+            .applyNativeItem(
+              payload.item,
+              payload.sectionId,
+              payload.placement,
+            );
         },
       ),
-      listen<{ itemId: string; bucketId: string }>(
+      listen<{
+        itemId: string;
+        bucketId: string;
+        placement: CapturePlacement;
+      }>(
         "native-captured-item-moved",
         ({ payload }) => {
           useCarbonStore
             .getState()
-            .moveItems([payload.itemId], payload.bucketId);
+            .moveItems(
+              [payload.itemId],
+              payload.bucketId,
+              payload.placement,
+            );
         },
       ),
     ]).then((listeners) => cleanups.push(...listeners));
