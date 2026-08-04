@@ -7,7 +7,9 @@ prompts, and keeping follow-up work nearby. Everything is stored locally.
 
 Built with Tauri 2, React, TypeScript, Tailwind CSS, Zustand, dnd-kit, and `fzf`.
 
-![alt text](image.png)
+<img src="image.png" alt="alt text" height="500" />
+<img src="image2.png" alt="alt text" height="500" />
+<img src="image3.png" alt="alt text" height="500" />
 
 ## Features
 
