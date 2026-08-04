@@ -1,7 +1,9 @@
 import {
+  AlertCircleIcon,
   ArrowDown01Icon,
   CheckmarkCircle02Icon,
   InboxIcon,
+  InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
@@ -19,30 +21,37 @@ import {
 import { Icon } from "./ui/icon";
 import { Toaster } from "./ui/sonner";
 
-function CaptureNotification({
-  onComplete,
+function SavedCaptureNotification({
   onMenuOpenChange,
   payload,
   toastId,
 }: {
-  onComplete: () => void;
   onMenuOpenChange: (open: boolean) => void;
-  payload: CaptureNotificationPayload;
+  payload: Extract<CaptureNotificationPayload, { kind: "saved" }>;
   toastId: string | number;
 }) {
   const [bucketId, setBucketId] = useState(payload.bucketId);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [dismissRevision, setDismissRevision] = useState(0);
   const bucketName =
     payload.buckets.find((bucket) => bucket.id === bucketId)?.name ?? "Inbox";
 
+  useEffect(() => {
+    if (menuOpen) return;
+    const timer = window.setTimeout(
+      () => toast.dismiss(toastId),
+      dismissRevision === 0 ? 6000 : 3200,
+    );
+    return () => window.clearTimeout(timer);
+  }, [dismissRevision, menuOpen, toastId]);
+
   async function selectBucket(nextBucketId: string) {
-    setBucketId(nextBucketId);
     await emitTo("main", "captured-item-bucket-changed", {
       itemId: payload.itemId,
       bucketId: nextBucketId,
     });
-    toast.dismiss(toastId);
-    onComplete();
+    setBucketId(nextBucketId);
+    setDismissRevision((current) => current + 1);
   }
 
   function setBucketMenuOpen(open: boolean) {
@@ -59,7 +68,9 @@ function CaptureNotification({
         <strong className="block truncate text-sm font-semibold text-ink">
           {payload.message}
         </strong>
-        <span className="mt-0.5 block text-xs text-muted">Saved to</span>
+        <span className="mt-0.5 block truncate text-xs text-muted">
+          {payload.preview}
+        </span>
       </div>
       <DropdownMenu open={menuOpen} onOpenChange={setBucketMenuOpen}>
         <DropdownMenuTrigger asChild>
@@ -95,14 +106,61 @@ function CaptureNotification({
   );
 }
 
+function CaptureNotification({
+  onMenuOpenChange,
+  payload,
+  toastId,
+}: {
+  onMenuOpenChange: (open: boolean) => void;
+  payload: CaptureNotificationPayload;
+  toastId: string | number;
+}) {
+  if (payload.kind === "saved") {
+    return (
+      <SavedCaptureNotification
+        onMenuOpenChange={onMenuOpenChange}
+        payload={payload}
+        toastId={toastId}
+      />
+    );
+  }
+
+  return (
+    <div className="flex w-[336px] items-center gap-3 rounded-2xl border border-line bg-surface-raised p-3 shadow-float">
+      <div
+        className={
+          payload.tone === "error"
+            ? "inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-danger-soft text-danger"
+            : "inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface-hover text-muted"
+        }
+      >
+        <Icon
+          icon={
+            payload.tone === "error"
+              ? AlertCircleIcon
+              : InformationCircleIcon
+          }
+          size={19}
+          strokeWidth={2.2}
+        />
+      </div>
+      <strong className="block min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+        {payload.message}
+      </strong>
+    </div>
+  );
+}
+
 export function CaptureToast() {
-  const activeItemIds = useRef(new Set<string>());
-  const [openMenuItemId, setOpenMenuItemId] = useState<string | null>(null);
+  const activeNotificationIds = useRef(new Set<string>());
+  const [openMenuNotificationId, setOpenMenuNotificationId] = useState<
+    string | null
+  >(null);
 
   useEffect(() => {
     const toaster = document.querySelector<HTMLElement>("[data-sonner-toaster]");
     if (!toaster) return;
-    if (openMenuItemId === null) {
+    if (openMenuNotificationId === null) {
       toaster.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
       return;
     }
@@ -110,16 +168,18 @@ export function CaptureToast() {
       toaster.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [openMenuItemId]);
+  }, [openMenuNotificationId]);
 
   useEffect(() => {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    function completeNotification(itemId: string) {
-      activeItemIds.current.delete(itemId);
-      setOpenMenuItemId((current) => (current === itemId ? null : current));
-      if (activeItemIds.current.size === 0) {
+    function completeNotification(notificationId: string) {
+      activeNotificationIds.current.delete(notificationId);
+      setOpenMenuNotificationId((current) =>
+        current === notificationId ? null : current,
+      );
+      if (activeNotificationIds.current.size === 0) {
         window.setTimeout(() => void getCurrentWindow().hide(), 180);
       }
     }
@@ -130,17 +190,18 @@ export function CaptureToast() {
       );
       if (cancelled) return;
       for (const payload of payloads) {
-        activeItemIds.current.add(payload.itemId);
+        const notificationId =
+          payload.kind === "saved" ? payload.itemId : payload.notificationId;
+        activeNotificationIds.current.add(notificationId);
         toast.custom(
           (toastId) => (
             <CaptureNotification
-              key={payload.itemId}
-              onComplete={() => completeNotification(payload.itemId)}
+              key={notificationId}
               onMenuOpenChange={(open) =>
-                setOpenMenuItemId((current) =>
+                setOpenMenuNotificationId((current) =>
                   open
-                    ? payload.itemId
-                    : current === payload.itemId
+                    ? notificationId
+                    : current === notificationId
                       ? null
                       : current,
                 )
@@ -150,11 +211,12 @@ export function CaptureToast() {
             />
           ),
           {
-            id: `capture-notification-${payload.itemId}`,
-            duration: 6000,
+            id: `capture-notification-${notificationId}`,
+            duration:
+              payload.kind === "saved" ? 24 * 60 * 60 * 1000 : 6000,
             unstyled: true,
-            onAutoClose: () => completeNotification(payload.itemId),
-            onDismiss: () => completeNotification(payload.itemId),
+            onAutoClose: () => completeNotification(notificationId),
+            onDismiss: () => completeNotification(notificationId),
           },
         );
       }
@@ -185,7 +247,7 @@ export function CaptureToast() {
   return (
     <main className="h-full w-full bg-transparent">
       <Toaster
-        expand={openMenuItemId !== null}
+        expand={openMenuNotificationId !== null}
         gap={8}
         offset={12}
         toastOptions={{ className: "!p-0 !bg-transparent !border-0 !shadow-none" }}

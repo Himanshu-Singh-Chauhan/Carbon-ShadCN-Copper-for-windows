@@ -5,7 +5,9 @@ import {
   type CarbonAttachment,
   type CarbonDocument,
   type CarbonItem,
+  type CarbonItemSource,
   type CarbonSettings,
+  type NoteSortMode,
   createDefaultDocument,
 } from "./model";
 import { createId } from "./utils";
@@ -22,6 +24,7 @@ interface CarbonState extends CarbonDocument {
     text: string,
     sectionId?: string,
     attachments?: CarbonAttachment[],
+    source?: CarbonItemSource,
   ) => AddedItem | undefined;
   createSection: (name: string) => void;
   renameSection: (sectionId: string, name: string) => void;
@@ -36,6 +39,7 @@ interface CarbonState extends CarbonDocument {
   deleteItems: (ids?: string[]) => void;
   moveItems: (itemIds: string[], sectionId: string) => void;
   reorderItem: (sectionId: string, activeId: string, overId: string) => void;
+  setSectionSortMode: (sectionId: string, sortMode: NoteSortMode) => void;
   setSelected: (ids: string[]) => void;
   toggleSelected: (id: string) => void;
   clearSelected: () => void;
@@ -83,7 +87,7 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
     return get().addItem(text, undefined, attachments);
   },
 
-  addItem: (text, requestedSectionId, attachments = []) => {
+  addItem: (text, requestedSectionId, attachments = [], source) => {
     const sectionId = targetSectionId(get(), requestedSectionId);
     if (!sectionId) return undefined;
     const now = new Date().toISOString();
@@ -91,6 +95,7 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
       id: createId("item"),
       text: text.trim(),
       attachments,
+      source,
       completed: false,
       createdAt: now,
       updatedAt: now,
@@ -113,7 +118,12 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
         (section) => section.name.toLowerCase() === name.toLowerCase(),
       );
       if (existing) return { activeSectionId: existing.id };
-      const section = { id: createId("section"), name, items: [] };
+      const section = {
+        id: createId("section"),
+        name,
+        sortMode: "manual" as const,
+        items: [],
+      };
       return {
         sections: [...state.sections, section],
         activeSectionId: section.id,
@@ -229,6 +239,13 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
         if (oldIndex < 0 || newIndex < 0) return section;
         return { ...section, items: arrayMove(section.items, oldIndex, newIndex) };
       }),
+    })),
+
+  setSectionSortMode: (sectionId, sortMode) =>
+    set((state) => ({
+      sections: state.sections.map((section) =>
+        section.id === sectionId ? { ...section, sortMode } : section,
+      ),
     })),
 
   setSelected: (selectedIds) => set({ selectedIds }),

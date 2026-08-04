@@ -1,14 +1,31 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { CarbonAttachment, CarbonDocument } from "./model";
+import type {
+  CarbonAttachment,
+  CarbonDocument,
+  CarbonItemSource,
+} from "./model";
 import { normalizeDocument } from "./model";
 
-export interface CaptureNotificationPayload {
+export interface SavedCaptureNotificationPayload {
+  kind: "saved";
   message: string;
+  preview: string;
   itemId: string;
   bucketId: string;
   buckets: Array<{ id: string; name: string }>;
 }
+
+export interface CaptureStatusNotificationPayload {
+  kind: "status";
+  message: string;
+  notificationId: string;
+  tone: "info" | "error";
+}
+
+export type CaptureNotificationPayload =
+  | SavedCaptureNotificationPayload
+  | CaptureStatusNotificationPayload;
 
 export interface ImageViewerPayload {
   attachments: CarbonAttachment[];
@@ -23,6 +40,11 @@ export interface LinkPreviewPayload {
   siteName: string;
   imagePath?: string;
   imageMimeType?: string;
+}
+
+export interface CapturedContent {
+  text: string;
+  source?: CarbonItemSource;
 }
 
 export function isTauri() {
@@ -74,8 +96,8 @@ export async function revealDataFile() {
 }
 
 export async function captureSelectedText() {
-  if (!isTauri()) return "";
-  return invoke<string>("capture_selected_text");
+  if (!isTauri()) return { text: "" } satisfies CapturedContent;
+  return invoke<CapturedContent>("capture_selected_text");
 }
 
 export async function showCaptureNotification(
@@ -133,6 +155,12 @@ export function getLinkPreview(url: string) {
 export async function readLinkPreviewImage(path: string) {
   if (!isTauri()) return new Uint8Array();
   const value = await invoke<ArrayBuffer>("read_link_preview_image", { path });
+  return new Uint8Array(value);
+}
+
+export async function readAppSourceIcon(path: string) {
+  if (!isTauri()) return new Uint8Array();
+  const value = await invoke<ArrayBuffer>("read_app_source_icon", { path });
   return new Uint8Array(value);
 }
 

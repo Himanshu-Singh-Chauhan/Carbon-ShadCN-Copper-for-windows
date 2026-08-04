@@ -43,7 +43,7 @@ export function LinkPreviewCard({ url }: { url: string }) {
   return (
     <button
       type="button"
-      className="mt-2 block w-full cursor-pointer overflow-hidden rounded-xl border border-line bg-surface text-left outline-none transition-[border-color,background-color] hover:border-line-strong hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-accent/35"
+      className="mt-2 block w-full min-w-0 max-w-full cursor-pointer overflow-hidden rounded-xl border border-line bg-surface text-left outline-none transition-[border-color,background-color] hover:border-line-strong hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-accent/35"
       onClick={(event) => {
         event.stopPropagation();
         void openExternalUrl(preview.url);
@@ -53,7 +53,7 @@ export function LinkPreviewCard({ url }: { url: string }) {
     >
       {imageUrl && (
         <img
-          className="aspect-video max-h-44 w-full bg-surface-hover object-cover"
+          className="aspect-video max-h-44 w-full max-w-full bg-surface-hover object-cover"
           src={imageUrl}
           alt=""
           draggable={false}
@@ -64,7 +64,7 @@ export function LinkPreviewCard({ url }: { url: string }) {
           <span className="min-w-0 flex-1 truncate">{preview.siteName}</span>
           <Icon className="shrink-0 text-faint" icon={ArrowUpRight01Icon} size={13} />
         </span>
-        <strong className="mt-1 block text-sm font-semibold leading-5 text-ink">
+        <strong className="mt-1 block max-w-full [overflow-wrap:anywhere] text-sm font-semibold leading-5 text-ink">
           {preview.title}
         </strong>
         {preview.description && (

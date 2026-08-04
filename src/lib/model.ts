@@ -1,6 +1,8 @@
 import { createId } from "./utils";
 
 export type Theme = "light" | "dark";
+export type NoteSortMode = "manual" | "created-desc" | "created-asc";
+export type DoubleClickAction = "copy" | "edit";
 
 export interface CarbonAttachment {
   id: string;
@@ -10,10 +12,19 @@ export interface CarbonAttachment {
   height: number;
 }
 
+export interface CarbonItemSource {
+  id: string;
+  appName: string;
+  iconPath?: string;
+  pageTitle?: string;
+  pageUrl?: string;
+}
+
 export interface CarbonItem {
   id: string;
   text: string;
   attachments: CarbonAttachment[];
+  source?: CarbonItemSource;
   completed: boolean;
   createdAt: string;
   updatedAt: string;
@@ -22,6 +33,7 @@ export interface CarbonItem {
 export interface CarbonSection {
   id: string;
   name: string;
+  sortMode: NoteSortMode;
   items: CarbonItem[];
 }
 
@@ -35,6 +47,10 @@ export interface WindowBounds {
 export interface CarbonSettings {
   theme: Theme;
   alwaysOnTop: boolean;
+  showLinkPreviews: boolean;
+  showCreatedAt: boolean;
+  showItemSources: boolean;
+  doubleClickAction: DoubleClickAction;
   captureHotkey: string;
   showWindowHotkey: string;
   windowBounds?: WindowBounds;
@@ -49,15 +65,27 @@ export interface CarbonDocument {
 
 export const ALL_SECTIONS = "all";
 
+function normalizeTimestamp(value: unknown, fallback: string) {
+  return typeof value === "string" && !Number.isNaN(Date.parse(value))
+    ? value
+    : fallback;
+}
+
 export function createDefaultDocument(): CarbonDocument {
   const inboxId = createId("section");
   return {
     version: 2,
     activeSectionId: ALL_SECTIONS,
-    sections: [{ id: inboxId, name: "Inbox", items: [] }],
+    sections: [
+      { id: inboxId, name: "Inbox", sortMode: "manual", items: [] },
+    ],
     settings: {
       theme: "light",
       alwaysOnTop: true,
+      showLinkPreviews: true,
+      showCreatedAt: true,
+      showItemSources: true,
+      doubleClickAction: "copy",
       captureHotkey: "CommandOrControl+Shift+C",
       showWindowHotkey: "CommandOrControl+Shift+Space",
     },
@@ -69,7 +97,8 @@ export function normalizeDocument(value: unknown): CarbonDocument {
   if (!value || typeof value !== "object") return fallback;
 
   const input = value as Partial<CarbonDocument>;
-  const sections = Array.isArray(input.sections)
+  const migrationTimestamp = new Date().toISOString();
+  const sections: CarbonSection[] = Array.isArray(input.sections)
     ? input.sections
         .filter(
           (section): section is CarbonSection =>
@@ -79,9 +108,14 @@ export function normalizeDocument(value: unknown): CarbonDocument {
                 typeof section.name === "string",
             ),
         )
-        .map((section) => ({
+        .map((section): CarbonSection => ({
           id: section.id,
           name: section.name,
+          sortMode:
+            section.sortMode === "created-desc" ||
+            section.sortMode === "created-asc"
+              ? section.sortMode
+              : "manual",
           items: Array.isArray(section.items)
             ? section.items
                 .filter(
@@ -90,22 +124,51 @@ export function normalizeDocument(value: unknown): CarbonDocument {
                   typeof item.id === "string" &&
                   typeof item.text === "string",
                 )
-                .map((item) => ({
-                  ...item,
-                  attachments: Array.isArray(item.attachments)
-                    ? item.attachments.filter(
-                        (attachment): attachment is CarbonAttachment =>
-                          Boolean(
-                            attachment &&
-                              typeof attachment.id === "string" &&
-                              typeof attachment.path === "string" &&
-                              typeof attachment.mimeType === "string" &&
-                              typeof attachment.width === "number" &&
-                              typeof attachment.height === "number",
-                          ),
-                      )
-                    : [],
-                }))
+                .map((item): CarbonItem => {
+                  const createdAt = normalizeTimestamp(
+                    item.createdAt,
+                    normalizeTimestamp(item.updatedAt, migrationTimestamp),
+                  );
+                  return {
+                    ...item,
+                    completed: Boolean(item.completed),
+                    createdAt,
+                    updatedAt: normalizeTimestamp(item.updatedAt, createdAt),
+                    attachments: Array.isArray(item.attachments)
+                      ? item.attachments.filter(
+                          (attachment): attachment is CarbonAttachment =>
+                            Boolean(
+                              attachment &&
+                                typeof attachment.id === "string" &&
+                                typeof attachment.path === "string" &&
+                                typeof attachment.mimeType === "string" &&
+                                typeof attachment.width === "number" &&
+                                typeof attachment.height === "number",
+                            ),
+                        )
+                      : [],
+                    source:
+                      item.source &&
+                      typeof item.source === "object" &&
+                      typeof item.source.id === "string" &&
+                      typeof item.source.appName === "string"
+                        ? {
+                            id: item.source.id,
+                            appName: item.source.appName,
+                            ...(typeof item.source.iconPath === "string"
+                              ? { iconPath: item.source.iconPath }
+                              : {}),
+                            ...(typeof item.source.pageTitle === "string"
+                              ? { pageTitle: item.source.pageTitle }
+                              : {}),
+                            ...(typeof item.source.pageUrl === "string" &&
+                            /^https?:\/\//i.test(item.source.pageUrl)
+                              ? { pageUrl: item.source.pageUrl }
+                              : {}),
+                          }
+                        : undefined,
+                  };
+                })
             : [],
         }))
     : fallback.sections;
@@ -126,6 +189,11 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       ...fallback.settings,
       ...(input.settings ?? {}),
       theme: input.settings?.theme === "dark" ? "dark" : "light",
+      showLinkPreviews: input.settings?.showLinkPreviews !== false,
+      showCreatedAt: input.settings?.showCreatedAt !== false,
+      showItemSources: input.settings?.showItemSources !== false,
+      doubleClickAction:
+        input.settings?.doubleClickAction === "edit" ? "edit" : "copy",
       captureHotkey:
         typeof input.settings?.captureHotkey === "string" &&
         input.settings.captureHotkey.trim()

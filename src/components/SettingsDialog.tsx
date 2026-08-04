@@ -1,4 +1,6 @@
 import {
+  Copy01Icon,
+  FileEditIcon,
   FolderOpenIcon,
   Moon02Icon,
   Sun02Icon,
@@ -70,6 +72,93 @@ export function SettingsDialog({
                   <span className="truncate">{label}</span>
                 </button>
               ))}
+            </div>
+          </section>
+
+          <section className={sectionStyles}>
+            <h3 className="mb-3 text-sm font-semibold text-ink">Notes</h3>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Link previews</p>
+                <p className="mt-0.5 text-xs leading-4 text-muted">
+                  Show cached page details below links.
+                </p>
+              </div>
+              <Switch
+                checked={settings.showLinkPreviews}
+                onCheckedChange={(showLinkPreviews) =>
+                  onUpdate({ showLinkPreviews })
+                }
+                aria-label="Show link previews"
+              />
+            </div>
+            <div className="my-3 h-px bg-line" />
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Date added</p>
+                <p className="mt-0.5 text-xs leading-4 text-muted">
+                  Show when each note was created.
+                </p>
+              </div>
+              <Switch
+                checked={settings.showCreatedAt}
+                onCheckedChange={(showCreatedAt) =>
+                  onUpdate({ showCreatedAt })
+                }
+                aria-label="Show date added"
+              />
+            </div>
+            <div className="my-3 h-px bg-line" />
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-ink">Capture source</p>
+                <p className="mt-0.5 text-xs leading-4 text-muted">
+                  Show the originating app on notes.
+                </p>
+              </div>
+              <Switch
+                checked={settings.showItemSources}
+                onCheckedChange={(showItemSources) =>
+                  onUpdate({ showItemSources })
+                }
+                aria-label="Show capture source"
+              />
+            </div>
+            <div className="my-3 h-px bg-line" />
+            <div>
+              <p className="text-sm font-medium text-ink">Double-click</p>
+              <p className="mt-0.5 text-xs leading-4 text-muted">
+                Choose what happens when a note is double-clicked.
+              </p>
+              <div
+                className="mt-2 grid grid-cols-2 gap-1 rounded-xl bg-surface-hover p-1"
+                role="radiogroup"
+                aria-label="Double-click action"
+              >
+                {[
+                  { value: "copy" as const, label: "Copy", icon: Copy01Icon },
+                  { value: "edit" as const, label: "Edit", icon: FileEditIcon },
+                ].map((action) => (
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={settings.doubleClickAction === action.value}
+                    className={cn(
+                      "inline-flex h-9 cursor-pointer items-center justify-center gap-1.5 rounded-lg border text-sm font-medium outline-none transition-all focus-visible:ring-2 focus-visible:ring-accent/35",
+                      settings.doubleClickAction === action.value
+                        ? "border-line bg-surface-raised text-ink shadow-sm"
+                        : "border-transparent text-muted hover:text-ink",
+                    )}
+                    key={action.value}
+                    onClick={() =>
+                      onUpdate({ doubleClickAction: action.value })
+                    }
+                  >
+                    <Icon icon={action.icon} size={15} />
+                    {action.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 

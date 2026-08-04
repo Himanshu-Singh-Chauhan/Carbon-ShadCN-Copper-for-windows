@@ -18,13 +18,16 @@ import {
   Search01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
-import type { MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import { CarbonItemRow } from "../../../components/CarbonItemRow";
+import { SortModeMenu } from "../../../components/SortModeMenu";
 import { Button } from "../../../components/ui/button";
 import { Icon } from "../../../components/ui/icon";
+import { formatCreatedAtGroup } from "../../../lib/dates";
 import type {
   CarbonItem,
   CarbonSection,
+  NoteSortMode,
 } from "../../../lib/model";
 
 export function NotesView({
@@ -33,6 +36,9 @@ export function NotesView({
   focusedItemId,
   itemCount,
   query,
+  showCreatedAt,
+  showItemSources,
+  showLinkPreviews,
   showSectionHeaders,
   selectedIds,
   visibleSections,
@@ -44,6 +50,7 @@ export function NotesView({
   onOpenCommands,
   onOpenImage,
   onSelect,
+  onSortModeChange,
   onToggle,
 }: {
   captureHotkey: string;
@@ -51,6 +58,9 @@ export function NotesView({
   focusedItemId: string | null;
   itemCount: number;
   query: string;
+  showCreatedAt: boolean;
+  showItemSources: boolean;
+  showLinkPreviews: boolean;
   showSectionHeaders: boolean;
   selectedIds: string[];
   visibleSections: CarbonSection[];
@@ -62,16 +72,23 @@ export function NotesView({
   onOpenCommands: () => void;
   onOpenImage: (item: CarbonItem, index: number) => void;
   onSelect: (itemId: string, event: MouseEvent) => void;
+  onSortModeChange: (sectionId: string, sortMode: NoteSortMode) => void;
   onToggle: (itemId: string) => void;
 }) {
+  const [now, setNow] = useState(() => Date.now());
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <section
-      className="min-h-0 flex-1 overflow-y-auto px-3 pb-4 pt-1 [scrollbar-color:var(--line-strong)_transparent] [scrollbar-width:thin]"
+      className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto px-3 pb-4 pt-1 [scrollbar-color:var(--line-strong)_transparent] [scrollbar-width:thin]"
       aria-label="Carbon notes"
       data-notes-scroll
     >
@@ -103,7 +120,7 @@ export function NotesView({
           collisionDetection={closestCenter}
           onDragEnd={onDragEnd}
         >
-          <div className="grid gap-5">
+          <div className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-5">
             {visibleSections.map((section) => (
               <SectionGroup
                 key={section.id}
@@ -112,12 +129,19 @@ export function NotesView({
                 focusedItemId={focusedItemId}
                 selectedIds={selectedIds}
                 showHeader={showSectionHeaders}
-                dragDisabled={Boolean(query)}
+                showCreatedAt={showCreatedAt}
+                showItemSources={showItemSources}
+                showLinkPreviews={showLinkPreviews}
+                now={now}
+                dragDisabled={
+                  Boolean(query) || section.sortMode !== "manual"
+                }
                 onToggle={onToggle}
                 onSelect={onSelect}
                 onContextMenu={onContextMenu}
                 onEdit={onEdit}
                 onOpenImage={onOpenImage}
+                onSortModeChange={onSortModeChange}
               />
             ))}
           </div>
@@ -133,27 +157,54 @@ function SectionGroup({
   focusedItemId,
   selectedIds,
   showHeader,
+  showCreatedAt,
+  showItemSources,
+  showLinkPreviews,
+  now,
   dragDisabled,
   onToggle,
   onSelect,
   onContextMenu,
   onEdit,
   onOpenImage,
+  onSortModeChange,
 }: {
   section: CarbonSection;
   query: string;
   focusedItemId: string | null;
   selectedIds: string[];
   showHeader: boolean;
+  showCreatedAt: boolean;
+  showItemSources: boolean;
+  showLinkPreviews: boolean;
+  now: number;
   dragDisabled: boolean;
   onToggle: (id: string) => void;
   onSelect: (id: string, event: MouseEvent) => void;
   onContextMenu: (event: MouseEvent, id: string) => void;
   onEdit: (item: CarbonItem) => void;
   onOpenImage: (item: CarbonItem, index: number) => void;
+  onSortModeChange: (sectionId: string, sortMode: NoteSortMode) => void;
 }) {
+  const itemGroups =
+    section.sortMode === "manual"
+      ? [{ label: null, items: section.items }]
+      : section.items.reduce<Array<{ label: string; items: CarbonItem[] }>>(
+          (groups, item) => {
+            const label = formatCreatedAtGroup(item.createdAt, now);
+            const previous = groups[groups.length - 1];
+            if (previous?.label === label) {
+              previous.items.push(item);
+            } else {
+              groups.push({ label, items: [item] });
+            }
+            return groups;
+          },
+          [],
+        );
+
   return (
-    <section className="relative">
+    <section className="relative min-w-0 max-w-full">
       {showHeader && (
         <div className="sticky top-0 z-10 -mx-1 mb-2 flex items-center gap-2 bg-canvas/90 px-1 py-1.5 backdrop-blur-md">
           <div className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-2 py-1 text-xs font-semibold text-muted shadow-sm">
@@ -162,27 +213,50 @@ function SectionGroup({
             <span className="tabular-nums text-faint">{section.items.length}</span>
           </div>
           <div className="h-px flex-1 bg-line" />
+          <SortModeMenu
+            value={section.sortMode}
+            onChange={(sortMode) => onSortModeChange(section.id, sortMode)}
+          />
         </div>
       )}
       <SortableContext
         items={section.items.map((item) => item.id)}
         strategy={verticalListSortingStrategy}
       >
-        <div className="grid gap-2">
-          {section.items.map((item) => (
-            <CarbonItemRow
-              key={item.id}
-              item={item}
-              focused={focusedItemId === item.id}
-              searchQuery={query}
-              selected={selectedIds.includes(item.id)}
-              dragDisabled={dragDisabled}
-              onToggle={() => onToggle(item.id)}
-              onSelect={(event) => onSelect(item.id, event)}
-              onContextMenu={(event) => onContextMenu(event, item.id)}
-              onEdit={() => onEdit(item)}
-              onOpenImage={(index) => onOpenImage(item, index)}
-            />
+        <div className="grid min-w-0 max-w-full grid-cols-[minmax(0,1fr)] gap-4">
+          {itemGroups.map((group) => (
+            <div
+              className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2"
+              key={group.label ?? "manual"}
+            >
+              {group.label && (
+                <div className="flex min-w-0 items-center gap-2 px-1 py-0.5">
+                  <span className="shrink-0 text-xs font-medium text-faint">
+                    {group.label}
+                  </span>
+                  <div className="h-px flex-1 bg-line/80" />
+                </div>
+              )}
+              {group.items.map((item) => (
+                <CarbonItemRow
+                  key={item.id}
+                  item={item}
+                  focused={focusedItemId === item.id}
+                  searchQuery={query}
+                  selected={selectedIds.includes(item.id)}
+                  dragDisabled={dragDisabled}
+                  now={now}
+                  showCreatedAt={showCreatedAt}
+                  showItemSources={showItemSources}
+                  showLinkPreviews={showLinkPreviews}
+                  onToggle={() => onToggle(item.id)}
+                  onSelect={(event) => onSelect(item.id, event)}
+                  onContextMenu={(event) => onContextMenu(event, item.id)}
+                  onEdit={() => onEdit(item)}
+                  onOpenImage={(index) => onOpenImage(item, index)}
+                />
+              ))}
+            </div>
           ))}
         </div>
       </SortableContext>

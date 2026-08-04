@@ -1,6 +1,8 @@
+mod app_source;
 mod double_shortcut;
 mod link_preview;
 
+use serde::Serialize;
 use serde_json::Value;
 use std::{
     collections::{HashSet, VecDeque},
@@ -203,6 +205,7 @@ fn choose_data_file(app: AppHandle, document: Value) -> Result<Option<String>, S
     }
     copy_assets(&current, &selected)?;
     link_preview::copy_cache(&current, &selected)?;
+    app_source::copy_cache(&current, &selected)?;
     write_document(&selected, &document)?;
     remove_unreferenced_assets(&selected, &document)?;
     let pointer = location_file_path(&app)?;
@@ -569,7 +572,7 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
         GetWindowThreadProcessId(editor, Some(&mut process_id));
         let selection_bytes = scintilla_message(editor, SCI_GETSELTEXT, null())?;
         if selection_bytes == 0 {
-            return Ok(None);
+            return Ok(Some(String::new()));
         }
         let byte_length = selection_bytes
             .checked_add(1)
@@ -609,7 +612,7 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
                 bytes.truncate(nul);
             }
             let text = String::from_utf8_lossy(&bytes).into_owned();
-            Ok((!text.is_empty()).then_some(text))
+            Ok(Some(text))
         })();
 
         let _ = VirtualFreeEx(process, remote_buffer, 0, MEM_RELEASE);
@@ -618,8 +621,22 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
     }
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CapturedContent {
+    text: String,
+    source: Option<app_source::CapturedSource>,
+}
+
 #[cfg(target_os = "windows")]
-fn capture_accessible_selection() -> Result<String, String> {
+enum SelectionProbe {
+    Unsupported,
+    Empty,
+    Text(String),
+}
+
+#[cfg(target_os = "windows")]
+fn capture_accessible_selection(app: AppHandle) -> Result<CapturedContent, String> {
     use windows::{
         core::Result as WindowsResult,
         Win32::{
@@ -629,7 +646,7 @@ fn capture_accessible_selection() -> Result<String, String> {
             },
             UI::Accessibility::{
                 CUIAutomation, IUIAutomation, IUIAutomationElement, IUIAutomationTextPattern,
-                UIA_TextPatternId,
+                TreeScope_Descendants, UIA_TextPatternId,
             },
         },
     };
@@ -643,7 +660,7 @@ fn capture_accessible_selection() -> Result<String, String> {
 
     unsafe fn selection_from_element(
         element: &IUIAutomationElement,
-    ) -> WindowsResult<Option<String>> {
+    ) -> WindowsResult<SelectionProbe> {
         let pattern: IUIAutomationTextPattern = element.GetCurrentPatternAs(UIA_TextPatternId)?;
         let ranges = pattern.GetSelection()?;
         let length = ranges.Length()?;
@@ -656,9 +673,70 @@ fn capture_accessible_selection() -> Result<String, String> {
             }
         }
 
-        Ok((!selections.is_empty()).then(|| selections.join("\n")))
+        Ok(if selections.is_empty() {
+            SelectionProbe::Empty
+        } else {
+            SelectionProbe::Text(selections.join("\n"))
+        })
     }
 
+    unsafe fn selection_from_focused_element(
+        automation: &IUIAutomation,
+    ) -> WindowsResult<SelectionProbe> {
+        let walker = automation.RawViewWalker()?;
+        let mut element = automation.GetFocusedElement()?;
+        let mut found_text_provider = false;
+        // Monaco's focused edit context and browser document editors do not
+        // always own TextPattern directly, so inspect their ancestor chain.
+        for _ in 0..24 {
+            match selection_from_element(&element) {
+                Ok(SelectionProbe::Text(text)) => return Ok(SelectionProbe::Text(text)),
+                Ok(SelectionProbe::Empty) => found_text_provider = true,
+                Ok(SelectionProbe::Unsupported) | Err(_) => {}
+            }
+            match walker.GetParentElement(&element) {
+                Ok(parent) => element = parent,
+                Err(_) => break,
+            }
+        }
+        Ok(if found_text_provider {
+            SelectionProbe::Empty
+        } else {
+            SelectionProbe::Unsupported
+        })
+    }
+
+    unsafe fn selection_from_window_tree(
+        automation: &IUIAutomation,
+        window: windows::Win32::Foundation::HWND,
+    ) -> WindowsResult<SelectionProbe> {
+        const MAX_ELEMENTS: i32 = 5_000;
+
+        let root = automation.ElementFromHandle(window)?;
+        let condition = automation.CreateTrueCondition()?;
+        let elements = root.FindAll(TreeScope_Descendants, &condition)?;
+        let length = elements.Length()?.min(MAX_ELEMENTS);
+        let mut found_text_provider = false;
+        for index in 0..length {
+            if let Ok(element) = elements.GetElement(index) {
+                match selection_from_element(&element) {
+                    Ok(SelectionProbe::Text(text)) => return Ok(SelectionProbe::Text(text)),
+                    Ok(SelectionProbe::Empty) => found_text_provider = true,
+                    Ok(SelectionProbe::Unsupported) | Err(_) => {}
+                }
+            }
+        }
+        Ok(if found_text_provider {
+            SelectionProbe::Empty
+        } else {
+            SelectionProbe::Unsupported
+        })
+    }
+
+    let source;
+    let is_code_editor;
+    let foreground;
+    let mut found_empty_selection = false;
     unsafe {
         CoInitializeEx(None, COINIT_MULTITHREADED)
             .ok()
@@ -666,56 +744,107 @@ fn capture_accessible_selection() -> Result<String, String> {
         let _apartment = ComApartment;
         let automation: IUIAutomation =
             CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).map_err(io_error)?;
-        let walker = automation.RawViewWalker().map_err(io_error)?;
+        foreground = app_source::foreground_window();
+        is_code_editor = foreground.is_some_and(app_source::is_code_editor);
+        source = foreground.and_then(|window| app_source::capture(&app, &automation, window));
         // Providers can briefly rebuild their accessibility tree while a
         // shortcut is handled. Retry against a fresh focused element rather
         // than surfacing a transient error to the user.
         for attempt in 0..5 {
-            if let Ok(mut element) = automation.GetFocusedElement() {
-                // The focused leaf in browsers and document editors is not
-                // always the element that owns TextPattern.
-                for _ in 0..16 {
-                    if let Ok(Some(text)) = selection_from_element(&element) {
-                        return Ok(text);
-                    }
-                    match walker.GetParentElement(&element) {
-                        Ok(parent) => element = parent,
-                        Err(_) => break,
-                    }
+            match selection_from_focused_element(&automation) {
+                Ok(SelectionProbe::Text(text)) => {
+                    return Ok(CapturedContent {
+                        text,
+                        source: source.clone(),
+                    });
                 }
+                Ok(SelectionProbe::Empty) => found_empty_selection = true,
+                Ok(SelectionProbe::Unsupported) | Err(_) => {}
             }
             if attempt < 4 {
                 std::thread::sleep(std::time::Duration::from_millis(30));
             }
         }
+
+        if is_code_editor {
+            // Electron enables Monaco's accessible text surface asynchronously
+            // after the first UI Automation request. Give that transition time
+            // to finish, then search the window because the TextPattern owner
+            // can be a sibling of Chromium's focused native edit context.
+            for attempt in 0..20 {
+                match selection_from_focused_element(&automation) {
+                    Ok(SelectionProbe::Text(text)) => {
+                        return Ok(CapturedContent {
+                            text,
+                            source: source.clone(),
+                        });
+                    }
+                    Ok(SelectionProbe::Empty) => found_empty_selection = true,
+                    Ok(SelectionProbe::Unsupported) | Err(_) => {}
+                }
+                if attempt < 19 {
+                    std::thread::sleep(std::time::Duration::from_millis(60));
+                }
+            }
+            if let Some(window) = foreground {
+                match selection_from_window_tree(&automation, window) {
+                    Ok(SelectionProbe::Text(text)) => {
+                        return Ok(CapturedContent {
+                            text,
+                            source: source.clone(),
+                        });
+                    }
+                    Ok(SelectionProbe::Empty) => found_empty_selection = true,
+                    Ok(SelectionProbe::Unsupported) | Err(_) => {}
+                }
+            }
+        }
     }
 
     if let Some(text) = capture_scintilla_selection()? {
-        return Ok(text);
+        return Ok(CapturedContent {
+            text,
+            source: source.clone(),
+        });
     }
     if let Some(text) = capture_win32_edit_selection()? {
-        return Ok(text);
+        return Ok(CapturedContent { text, source });
     }
 
-    Err(
-        "The focused app does not expose its selected text through Windows UI Automation."
-            .to_string(),
-    )
+    if found_empty_selection {
+        return Ok(CapturedContent {
+            text: String::new(),
+            source,
+        });
+    }
+
+    if is_code_editor {
+        Err(
+            "VS Code has not exposed the editor selection. Set “Editor: Accessibility Support” to On in VS Code, then try again."
+                .to_string(),
+        )
+    } else {
+        Err(
+            "The focused app does not expose its selected text through Windows UI Automation."
+                .to_string(),
+        )
+    }
 }
 
 #[tauri::command]
-fn capture_selected_text() -> Result<String, String> {
+fn capture_selected_text(app: AppHandle) -> Result<CapturedContent, String> {
     #[cfg(target_os = "windows")]
     {
         // Use a dedicated COM apartment so capture works consistently regardless
         // of which Tauri IPC worker receives the command.
-        return std::thread::spawn(capture_accessible_selection)
+        return std::thread::spawn(move || capture_accessible_selection(app))
             .join()
             .map_err(|_| "Windows UI Automation capture stopped unexpectedly.".to_string())?;
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = app;
         Err("Selection capture is currently implemented for Windows.".to_string())
     }
 }
@@ -873,6 +1002,7 @@ pub fn run() {
             copy_items_to_clipboard_history,
             link_preview::get_link_preview,
             link_preview::read_link_preview_image,
+            app_source::read_app_source_icon,
             trash_image_asset,
             capture_selected_text,
             show_capture_notification,

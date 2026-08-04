@@ -54,15 +54,27 @@ export function DropdownMenuCheckboxItem({
   children,
   className,
   checked,
+  indicatorSide = "left",
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem>) {
+}: ComponentProps<typeof DropdownMenuPrimitive.CheckboxItem> & {
+  indicatorSide?: "left" | "right";
+}) {
   return (
     <DropdownMenuPrimitive.CheckboxItem
-      className={cn(itemStyles, "pl-8", className)}
+      className={cn(
+        itemStyles,
+        indicatorSide === "right" ? "pr-8" : "pl-8",
+        className,
+      )}
       checked={checked}
       {...props}
     >
-      <span className="absolute left-2 inline-flex size-4 items-center justify-center text-accent">
+      <span
+        className={cn(
+          "absolute inline-flex size-4 items-center justify-center text-accent",
+          indicatorSide === "right" ? "right-2" : "left-2",
+        )}
+      >
         <DropdownMenuPrimitive.ItemIndicator>
           <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.2} />
         </DropdownMenuPrimitive.ItemIndicator>
@@ -75,14 +87,26 @@ export function DropdownMenuCheckboxItem({
 export function DropdownMenuRadioItem({
   children,
   className,
+  indicatorSide = "left",
   ...props
-}: ComponentProps<typeof DropdownMenuPrimitive.RadioItem>) {
+}: ComponentProps<typeof DropdownMenuPrimitive.RadioItem> & {
+  indicatorSide?: "left" | "right";
+}) {
   return (
     <DropdownMenuPrimitive.RadioItem
-      className={cn(itemStyles, "pl-8", className)}
+      className={cn(
+        itemStyles,
+        indicatorSide === "right" ? "pr-8" : "pl-8",
+        className,
+      )}
       {...props}
     >
-      <span className="absolute left-2 inline-flex size-4 items-center justify-center text-accent">
+      <span
+        className={cn(
+          "absolute inline-flex size-4 items-center justify-center text-accent",
+          indicatorSide === "right" ? "right-2" : "left-2",
+        )}
+      >
         <DropdownMenuPrimitive.ItemIndicator>
           <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.2} />
         </DropdownMenuPrimitive.ItemIndicator>

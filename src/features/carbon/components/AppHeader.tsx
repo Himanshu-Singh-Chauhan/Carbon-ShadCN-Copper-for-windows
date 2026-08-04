@@ -1,5 +1,4 @@
 import {
-  ArrowDown01Icon,
   Cancel01Icon,
   CheckmarkCircle02Icon,
   Download01Icon,
@@ -12,6 +11,12 @@ import {
   Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import type { RefObject } from "react";
+import { BucketMenu } from "../../../components/BucketMenu";
+import {
+  SourceFilterMenu,
+  type SourceFilterOption,
+} from "../../../components/SourceFilterMenu";
+import { SortModeMenu } from "../../../components/SortModeMenu";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -23,38 +28,60 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Icon } from "../../../components/ui/icon";
-import type { CarbonSettings } from "../../../lib/model";
+import type {
+  CarbonSection,
+  CarbonSettings,
+  NoteSortMode,
+} from "../../../lib/model";
 
 export function AppHeader({
   activeName,
+  activeBucketId,
+  buckets,
   itemCount,
   query,
   searchRef,
   settings,
+  sortMode,
+  sourceFilterOptions,
+  selectedSourceKeys,
   onAlwaysOnTopChange,
   onCheckUpdates,
   onClearQuery,
+  onClearSourceFilter,
   onCopyMarkdown,
   onOpenCommands,
   onOpenSettings,
   onQueryChange,
   onQuit,
   onRevealData,
+  onSelectBucket,
+  onSortModeChange,
+  onToggleSourceFilter,
 }: {
   activeName: string;
+  activeBucketId: string;
+  buckets: CarbonSection[];
   itemCount: number;
   query: string;
   searchRef: RefObject<HTMLInputElement | null>;
   settings: CarbonSettings;
+  sortMode?: NoteSortMode;
+  sourceFilterOptions: SourceFilterOption[];
+  selectedSourceKeys: string[];
   onAlwaysOnTopChange: (value: boolean) => void;
   onCheckUpdates: () => void;
   onClearQuery: () => void;
+  onClearSourceFilter: () => void;
   onCopyMarkdown: () => void;
   onOpenCommands: () => void;
   onOpenSettings: () => void;
   onQueryChange: (value: string) => void;
   onQuit: () => void;
   onRevealData: () => void;
+  onSelectBucket: (bucketId: string) => void;
+  onSortModeChange?: (sortMode: NoteSortMode) => void;
+  onToggleSourceFilter: (key: string) => void;
 }) {
   return (
     <header className="shrink-0 px-4 pb-2 pt-4">
@@ -144,20 +171,27 @@ export function AppHeader({
         </DropdownMenu>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 px-0.5">
-        <button
-          type="button"
-          className="inline-flex min-w-0 cursor-pointer items-center gap-1.5 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-accent/35"
-          onClick={onOpenCommands}
-        >
-          <span className="truncate text-sm font-semibold tracking-[-0.015em] text-ink">
-            {activeName}
-          </span>
-          <Icon className="shrink-0 text-faint" icon={ArrowDown01Icon} size={13} />
-        </button>
-        <span className="shrink-0 text-xs tabular-nums text-faint">
-          {itemCount} {itemCount === 1 ? "item" : "items"}
-        </span>
+      <div className="mt-4 flex min-w-0 items-center gap-2 px-0.5">
+        <BucketMenu
+          activeBucketId={activeBucketId}
+          activeName={activeName}
+          buckets={buckets}
+          itemCount={itemCount}
+          onSelect={onSelectBucket}
+        />
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+          {sourceFilterOptions.length > 0 && (
+            <SourceFilterMenu
+              options={sourceFilterOptions}
+              selectedKeys={selectedSourceKeys}
+              onClear={onClearSourceFilter}
+              onToggle={onToggleSourceFilter}
+            />
+          )}
+          {sortMode && onSortModeChange && (
+            <SortModeMenu value={sortMode} onChange={onSortModeChange} />
+          )}
+        </div>
       </div>
     </header>
   );

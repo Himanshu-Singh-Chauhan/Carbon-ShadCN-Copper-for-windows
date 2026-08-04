@@ -1,28 +1,28 @@
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   register,
   unregister,
 } from "@tauri-apps/plugin-global-shortcut";
-import { useCallback, useEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { captureSelectedText, isTauri } from "../../../lib/native";
 import { useCarbonStore } from "../../../lib/store";
 import { doublePressModifier } from "../../../lib/utils";
-import { showAddedItemNotification } from "../capture-notification";
+import {
+  showAddedItemNotification,
+  showCaptureStatusNotification,
+} from "../capture-notification";
 import type { Notify } from "../types";
 
 export function useCaptureShortcut({
   hydrated,
   enabled,
   hotkey,
-  inputRef,
   notify,
   onReadyChange,
 }: {
   hydrated: boolean;
   enabled: boolean;
   hotkey: string;
-  inputRef: RefObject<HTMLTextAreaElement | null>;
   notify: Notify;
   onReadyChange: (ready: boolean) => void;
 }) {
@@ -32,29 +32,32 @@ export function useCaptureShortcut({
     if (!enabled || captureInFlight.current) return;
     captureInFlight.current = true;
     try {
-      const text = (await captureSelectedText()).trim();
+      const captured = await captureSelectedText();
+      const text = captured.text.trim();
       if (!text) {
-        await getCurrentWindow().show();
-        await getCurrentWindow().setFocus();
-        notify("Nothing was selected. Type a note instead.");
-        inputRef.current?.focus();
+        await showCaptureStatusNotification("No selection").catch(
+          () => undefined,
+        );
         return;
       }
-      const added = useCarbonStore.getState().addItem(text);
+      const added = useCarbonStore
+        .getState()
+        .addItem(text, undefined, undefined, captured.source);
       void showAddedItemNotification(added, "Captured to Carbon").catch(
         () => undefined,
       );
-    } catch {
-      await getCurrentWindow().show();
-      await getCurrentWindow().setFocus();
-      notify(
-        "Carbon couldn’t read this app’s selection. Clipboard untouched.",
+    } catch (error) {
+      const message = String(error);
+      void showCaptureStatusNotification(
+        message.includes("Editor: Accessibility Support")
+          ? "VS Code needs Accessibility Support enabled"
+          : "Couldn’t read this app’s selection",
         "error",
-      );
+      ).catch(() => undefined);
     } finally {
       captureInFlight.current = false;
     }
-  }, [enabled, inputRef, notify]);
+  }, [enabled]);
 
   useEffect(() => {
     if (!hydrated || !isTauri()) return;

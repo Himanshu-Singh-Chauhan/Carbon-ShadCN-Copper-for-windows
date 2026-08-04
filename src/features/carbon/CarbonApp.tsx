@@ -14,6 +14,7 @@ import {
 } from "react";
 import { CommandPalette } from "../../components/CommandPalette";
 import { SettingsDialog } from "../../components/SettingsDialog";
+import type { SourceFilterOption } from "../../components/SourceFilterMenu";
 import { Icon } from "../../components/ui/icon";
 import {
   ALL_SECTIONS,
@@ -51,6 +52,12 @@ import { useTheme } from "./hooks/useTheme";
 import { useWindowIntegration } from "./hooks/useWindowIntegration";
 import type { ContextMenuState, ToastMessage } from "./types";
 
+const UNATTRIBUTED_SOURCE_KEY = "source:unattributed";
+
+function itemSourceKey(item: CarbonItem) {
+  return item.source ? `source:app:${item.source.id}` : UNATTRIBUTED_SOURCE_KEY;
+}
+
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -77,6 +84,7 @@ export function CarbonApp() {
     deleteItems,
     moveItems,
     reorderItem,
+    setSectionSortMode,
     setSelected,
     toggleSelected,
     clearSelected,
@@ -95,6 +103,9 @@ export function CarbonApp() {
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [captureReady, setCaptureReady] = useState(true);
   const [copyingItems, setCopyingItems] = useState(false);
+  const [sourceFilters, setSourceFilters] = useState<
+    Record<string, string[]>
+  >({});
   const searchRef = useRef<HTMLInputElement>(null);
   const toastId = useRef(0);
   const copyInFlight = useRef(false);
@@ -178,7 +189,6 @@ export function CarbonApp() {
     enabled: !settingsOpen,
     hydrated,
     hotkey: settings.captureHotkey,
-    inputRef,
     notify,
     onReadyChange: setCaptureReady,
   });
@@ -203,26 +213,76 @@ export function CarbonApp() {
         : sections.filter((section) => section.id === activeSectionId),
     [activeSectionId, sections],
   );
+  const selectedSourceKeys = sourceFilters[activeSectionId] ?? [];
+  const sourceFilterOptions = useMemo<SourceFilterOption[]>(() => {
+    const options = new Map<string, SourceFilterOption>();
+    for (const item of sourceSections.flatMap((section) => section.items)) {
+      const key = itemSourceKey(item);
+      const existing = options.get(key);
+      if (existing) {
+        existing.count += 1;
+        continue;
+      }
+      options.set(key, {
+        key,
+        label: item.source?.appName ?? "Unattributed",
+        description: item.source ? undefined : "No captured app",
+        source: item.source,
+        count: 1,
+      });
+    }
+    return [...options.values()].sort((left, right) => {
+      if (left.key === UNATTRIBUTED_SOURCE_KEY) return 1;
+      if (right.key === UNATTRIBUTED_SOURCE_KEY) return -1;
+      return left.label.localeCompare(right.label);
+    });
+  }, [sourceSections]);
 
   const visibleSections = useMemo(() => {
-    if (!query.trim()) return sourceSections;
-    const items = sourceSections.flatMap((section) =>
-      section.items.map((item) => ({ item, sectionId: section.id })),
-    );
-    const fzf = new Fzf(items, {
-      selector: (entry) => entry.item.text,
-      fuzzy: "v2",
-    });
-    const matchingIds = new Set(
-      fzf.find(query).map((result) => result.item.item.id),
-    );
-    return sourceSections
-      .map((section) => ({
+    const selectedSources = new Set(selectedSourceKeys);
+    let filteredSections =
+      selectedSources.size === 0
+        ? sourceSections
+        : sourceSections
+            .map((section) => ({
+              ...section,
+              items: section.items.filter((item) =>
+                selectedSources.has(itemSourceKey(item)),
+              ),
+            }))
+            .filter((section) => section.items.length > 0);
+    if (query.trim()) {
+      const items = filteredSections.flatMap((section) =>
+        section.items.map((item) => ({ item, sectionId: section.id })),
+      );
+      const fzf = new Fzf(items, {
+        selector: (entry) => entry.item.text,
+        fuzzy: "v2",
+      });
+      const matchingIds = new Set(
+        fzf.find(query).map((result) => result.item.item.id),
+      );
+      filteredSections = filteredSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => matchingIds.has(item.id)),
+        }))
+        .filter((section) => section.items.length > 0);
+    }
+
+    return filteredSections.map((section) => {
+      if (section.sortMode === "manual") return section;
+      const direction = section.sortMode === "created-asc" ? 1 : -1;
+      return {
         ...section,
-        items: section.items.filter((item) => matchingIds.has(item.id)),
-      }))
-      .filter((section) => section.items.length > 0);
-  }, [query, sourceSections]);
+        items: [...section.items].sort(
+          (left, right) =>
+            direction *
+            (Date.parse(left.createdAt) - Date.parse(right.createdAt)),
+        ),
+      };
+    });
+  }, [query, selectedSourceKeys, sourceSections]);
 
   const allVisibleItems = useMemo(
     () => visibleSections.flatMap((section) => section.items),
@@ -465,7 +525,10 @@ export function CarbonApp() {
     const overId = event.over ? String(event.over.id) : null;
     if (!overId || activeId === overId) return;
     const section = sectionForItem(activeId);
-    if (section?.items.some((item) => item.id === overId)) {
+    if (
+      section?.sortMode === "manual" &&
+      section.items.some((item) => item.id === overId)
+    ) {
       reorderItem(section.id, activeId, overId);
     }
   }
@@ -506,11 +569,14 @@ export function CarbonApp() {
     }
   }
 
+  const activeSection =
+    activeSectionId === ALL_SECTIONS
+      ? undefined
+      : sections.find((section) => section.id === activeSectionId);
   const activeName =
     activeSectionId === ALL_SECTIONS
       ? "All notes"
-      : sections.find((section) => section.id === activeSectionId)?.name ??
-        "Inbox";
+      : activeSection?.name ?? "Inbox";
   const captureSectionName =
     activeSectionId === ALL_SECTIONS
       ? sections[0]?.name ?? "Inbox"
@@ -530,7 +596,7 @@ export function CarbonApp() {
 
   if (!hydrated) {
     return (
-      <main className="flex h-full items-center justify-center rounded-2xl border border-line bg-canvas text-muted">
+      <main className="flex h-full items-center justify-center rounded-2xl border border-line bg-canvas text-muted ring-4 ring-inset ring-line/60">
         <div className="flex flex-col items-center gap-3">
           <span className="inline-flex size-11 animate-pulse items-center justify-center rounded-2xl border border-line bg-surface-raised text-accent shadow-sm">
             <Icon icon={SparklesIcon} size={20} />
@@ -543,7 +609,7 @@ export function CarbonApp() {
 
   return (
     <main
-      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-[inset_0_1px_0_rgb(255_255_255/0.08)]"
+      className="relative flex h-full w-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] ring-4 ring-inset ring-line/60"
       onPointerDown={startWindowDrag}
       onContextMenu={openPasteMenu}
     >
@@ -553,11 +619,16 @@ export function CarbonApp() {
       />
 
       <AppHeader
+        activeBucketId={activeSectionId}
         activeName={activeName}
+        buckets={sections}
         itemCount={itemCount}
         query={query}
         searchRef={searchRef}
         settings={settings}
+        sortMode={activeSection?.sortMode}
+        sourceFilterOptions={sourceFilterOptions}
+        selectedSourceKeys={selectedSourceKeys}
         onAlwaysOnTopChange={(alwaysOnTop) =>
           updateSettings({ alwaysOnTop })
         }
@@ -565,12 +636,35 @@ export function CarbonApp() {
           notify("You’re on the latest development build.")
         }
         onClearQuery={() => setQuery("")}
+        onClearSourceFilter={() =>
+          setSourceFilters((current) => ({
+            ...current,
+            [activeSectionId]: [],
+          }))
+        }
         onCopyMarkdown={() => void copyMarkdown()}
         onOpenCommands={() => setCommandOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
         onQueryChange={setQuery}
         onQuit={() => void quitApp()}
         onRevealData={() => void revealLocalData()}
+        onSelectBucket={setActiveSection}
+        onSortModeChange={
+          activeSection
+            ? (sortMode) => setSectionSortMode(activeSection.id, sortMode)
+            : undefined
+        }
+        onToggleSourceFilter={(key) =>
+          setSourceFilters((current) => {
+            const selected = current[activeSectionId] ?? [];
+            return {
+              ...current,
+              [activeSectionId]: selected.includes(key)
+                ? selected.filter((selectedKey) => selectedKey !== key)
+                : [...selected, key],
+            };
+          })
+        }
       />
 
       <NotesView
@@ -579,6 +673,9 @@ export function CarbonApp() {
         focusedItemId={focusedItemId}
         itemCount={itemCount}
         query={query}
+        showCreatedAt={settings.showCreatedAt}
+        showItemSources={settings.showItemSources}
+        showLinkPreviews={settings.showLinkPreviews}
         showSectionHeaders={activeSectionId === ALL_SECTIONS}
         selectedIds={selectedIds}
         visibleSections={visibleSections}
@@ -586,6 +683,10 @@ export function CarbonApp() {
         onContextMenu={openContextMenu}
         onDragEnd={handleDragEnd}
         onEdit={(item) => {
+          if (settings.doubleClickAction === "copy") {
+            void copyItems([item]);
+            return;
+          }
           startEditing(item);
           setFocusedItemId(item.id);
           clearSelected();
@@ -607,6 +708,7 @@ export function CarbonApp() {
             clearSelected();
           }
         }}
+        onSortModeChange={setSectionSortMode}
         onToggle={toggleItem}
       />
 
