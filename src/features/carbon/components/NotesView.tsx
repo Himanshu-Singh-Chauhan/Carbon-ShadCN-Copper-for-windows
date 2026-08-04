@@ -12,11 +12,13 @@ import { useEffect, useState, type MouseEvent } from "react";
 import type {
   CarbonItem,
   CarbonSection,
+  DoneViewMode,
   NoteSortMode,
 } from "../../../lib/model";
 import { NoteSectionGroup } from "./notes-view/NoteSectionGroup";
 import {
   NoSearchResults,
+  DoneEmptyState,
   NotesEmptyState,
 } from "./notes-view/NotesEmptyState";
 
@@ -25,6 +27,8 @@ export type NotesViewProps = {
   captureReady: boolean;
   focusedItemId: string | null;
   itemCount: number;
+  viewItemCount: number;
+  doneViewMode: DoneViewMode;
   query: string;
   showCreatedAt: boolean;
   showItemSources: boolean;
@@ -54,6 +58,8 @@ export function NotesView({
   captureReady,
   focusedItemId,
   itemCount,
+  viewItemCount,
+  doneViewMode,
   query,
   showCreatedAt,
   showItemSources,
@@ -85,7 +91,9 @@ export function NotesView({
   }, []);
 
   let content;
-  if (itemCount === 0 && !query) {
+  if (doneViewMode === "done" && viewItemCount === 0 && !query) {
+    content = <DoneEmptyState />;
+  } else if (itemCount === 0 && !query) {
     content = (
       <NotesEmptyState
         captureHotkey={captureHotkey}

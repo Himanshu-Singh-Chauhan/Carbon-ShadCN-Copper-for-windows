@@ -21,9 +21,10 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Close asChild>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-40 cursor-default rounded-2xl bg-black/45 backdrop-blur-[2px]" />
-      </DialogPrimitive.Close>
+      <DialogPrimitive.Overlay
+        className="fixed inset-0 z-40 cursor-default rounded-2xl bg-black/45 backdrop-blur-[2px]"
+        data-no-window-drag
+      />
       <DialogPrimitive.Content
         className={cn(
           "fixed left-1/2 top-1/2 z-50 max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-[420px] -translate-x-1/2 -translate-y-1/2 overflow-x-hidden overflow-y-auto rounded-2xl border border-line bg-surface-raised p-4 text-ink shadow-float outline-none",

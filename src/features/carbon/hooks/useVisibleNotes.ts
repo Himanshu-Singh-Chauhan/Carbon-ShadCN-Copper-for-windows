@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Fzf } from "fzf";
 import type { SourceFilterOption } from "../../../components/SourceFilterMenu";
 import {
   ALL_SECTIONS,
   type CarbonItem,
   type CarbonSection,
+  type DoneViewMode,
 } from "../../../lib/model";
 
 const UNATTRIBUTED_SOURCE_KEY = "source:unattributed";
@@ -76,10 +77,12 @@ function sortSections(sections: CarbonSection[]) {
 
 export function useVisibleNotes({
   activeSectionId,
+  doneViewMode,
   query,
   sections,
 }: {
   activeSectionId: string;
+  doneViewMode: DoneViewMode;
   query: string;
   sections: CarbonSection[];
 }) {
@@ -93,6 +96,19 @@ export function useVisibleNotes({
         : sections.filter((section) => section.id === activeSectionId),
     [activeSectionId, sections],
   );
+  const completionSections = useMemo(
+    () =>
+      sourceSections
+        .map((section) => ({
+          ...section,
+          items: section.items.filter((item) => {
+            if (doneViewMode === "all") return true;
+            return doneViewMode === "done" ? item.completed : !item.completed;
+          }),
+        }))
+        .filter((section) => section.items.length > 0),
+    [doneViewMode, sourceSections],
+  );
   const selectedSourceKeys = sourceFilters[activeSectionId] ?? [];
   const sourceFilterOptions = useMemo(
     () => createSourceFilterOptions(sourceSections),
@@ -102,8 +118,8 @@ export function useVisibleNotes({
     const selectedSources = new Set(selectedSourceKeys);
     const sourceFiltered =
       selectedSources.size === 0
-        ? sourceSections
-        : sourceSections
+        ? completionSections
+        : completionSections
             .map((section) => ({
               ...section,
               items: section.items.filter((item) =>
@@ -112,7 +128,13 @@ export function useVisibleNotes({
             }))
             .filter((section) => section.items.length > 0);
     return sortSections(filterByQuery(sourceFiltered, query));
-  }, [query, selectedSourceKeys, sourceSections]);
+  }, [completionSections, query, selectedSourceKeys]);
+  const clearSourceFilterFor = useCallback((sectionId: string) => {
+    setSourceFilters((current) => ({
+      ...current,
+      [sectionId]: [],
+    }));
+  }, []);
 
   return {
     allVisibleItems: visibleSections.flatMap((section) => section.items),
@@ -121,13 +143,23 @@ export function useVisibleNotes({
         ...current,
         [activeSectionId]: [],
       })),
+    clearSourceFilterFor,
     itemCount: sourceSections.reduce(
       (count, section) => count + section.items.length,
+      0,
+    ),
+    doneCount: sourceSections.reduce(
+      (count, section) =>
+        count + section.items.filter((item) => item.completed).length,
       0,
     ),
     selectedSourceKeys,
     sourceFilterOptions,
     sourceSections,
+    viewItemCount: completionSections.reduce(
+      (count, section) => count + section.items.length,
+      0,
+    ),
     toggleSourceFilter: (key: string) =>
       setSourceFilters((current) => {
         const selected = current[activeSectionId] ?? [];

@@ -33,6 +33,11 @@ export interface ImageViewerPayload {
   itemId?: string;
 }
 
+export interface MainNavigationPayload {
+  bucketId: string;
+  itemId: string;
+}
+
 export interface LinkPreviewPayload {
   url: string;
   title: string;
@@ -81,6 +86,11 @@ export async function minimizeMainWindow() {
 export async function markMainWindowReady() {
   if (!isTauri()) return;
   await invoke("main_window_ready");
+}
+
+export async function takeMainNavigation() {
+  if (!isTauri()) return null;
+  return invoke<MainNavigationPayload | null>("take_main_navigation");
 }
 
 export async function configureNativeShortcuts(

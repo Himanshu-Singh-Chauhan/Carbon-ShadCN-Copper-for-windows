@@ -32,13 +32,17 @@ import { Icon } from "../../../components/ui/icon";
 import type {
   CarbonSection,
   CarbonSettings,
+  DoneViewMode,
   NoteSortMode,
 } from "../../../lib/model";
+import { DoneViewControl } from "./DoneViewControl";
 
 export function AppHeader({
   activeName,
   activeBucketId,
   buckets,
+  doneCount,
+  doneViewMode,
   itemCount,
   query,
   searchRef,
@@ -51,6 +55,8 @@ export function AppHeader({
   onClearQuery,
   onClearSourceFilter,
   onCopyMarkdown,
+  onDeleteAllDone,
+  onDoneViewModeChange,
   onOpenCommands,
   onMinimizeToTray,
   onOpenSettings,
@@ -64,6 +70,8 @@ export function AppHeader({
   activeName: string;
   activeBucketId: string;
   buckets: CarbonSection[];
+  doneCount: number;
+  doneViewMode: DoneViewMode;
   itemCount: number;
   query: string;
   searchRef: RefObject<HTMLInputElement | null>;
@@ -76,6 +84,8 @@ export function AppHeader({
   onClearQuery: () => void;
   onClearSourceFilter: () => void;
   onCopyMarkdown: () => void;
+  onDeleteAllDone: () => void;
+  onDoneViewModeChange: (mode: DoneViewMode) => void;
   onOpenCommands: () => void;
   onMinimizeToTray: () => void;
   onOpenSettings: () => void;
@@ -219,7 +229,14 @@ export function AppHeader({
           onSelect={onSelectBucket}
         />
         <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2">
-          {sourceFilterOptions.length > 0 && (
+          <DoneViewControl
+            doneCount={doneCount}
+            mode={doneViewMode}
+            onChange={onDoneViewModeChange}
+            onDeleteAll={onDeleteAllDone}
+          />
+          {(sourceFilterOptions.length > 0 ||
+            selectedSourceKeys.length > 0) && (
             <SourceFilterMenu
               options={sourceFilterOptions}
               selectedKeys={selectedSourceKeys}

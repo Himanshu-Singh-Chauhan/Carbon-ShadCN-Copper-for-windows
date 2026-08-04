@@ -33,6 +33,9 @@ const DEVELOPMENT_DIRECTORY_NAME: &str = "development";
 #[derive(Default)]
 struct PendingImageViewer(Mutex<Option<Value>>);
 
+#[derive(Default)]
+struct PendingMainNavigation(Mutex<Option<Value>>);
+
 pub(crate) fn io_error(error: impl std::fmt::Display) -> String {
     error.to_string()
 }
@@ -77,6 +80,33 @@ pub(crate) fn resolve_data_path(app: &AppHandle) -> Result<PathBuf, String> {
 #[tauri::command]
 async fn show_main_window(app: AppHandle) -> Result<(), String> {
     window_manager::show_main_window(app).await
+}
+
+#[tauri::command]
+async fn show_captured_item(
+    app: AppHandle,
+    pending: State<'_, PendingMainNavigation>,
+    bucket_id: String,
+    item_id: String,
+) -> Result<(), String> {
+    *pending.0.lock().map_err(io_error)? = Some(serde_json::json!({
+        "bucketId": bucket_id,
+        "itemId": item_id,
+    }));
+    window_manager::show_main_window(app.clone()).await?;
+    app.emit_to(
+        window_manager::MAIN_WINDOW_LABEL,
+        "main-navigation-requested",
+        (),
+    )
+    .map_err(io_error)
+}
+
+#[tauri::command]
+fn take_main_navigation(
+    pending: State<'_, PendingMainNavigation>,
+) -> Result<Option<Value>, String> {
+    Ok(pending.0.lock().map_err(io_error)?.take())
 }
 
 #[tauri::command]
@@ -199,6 +229,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(PendingCaptureNotifications::default())
         .manage(PendingImageViewer::default())
+        .manage(PendingMainNavigation::default())
         .manage(CarbonStorageState::default())
         .manage(shortcut_runtime::ShortcutRuntimeState::default())
         .plugin(tauri_plugin_opener::init())
@@ -219,6 +250,8 @@ pub fn run() {
             save_carbon_data,
             get_data_file_path,
             show_main_window,
+            show_captured_item,
+            take_main_navigation,
             minimize_main_window,
             main_window_ready,
             shortcut_runtime::configure_native_shortcuts,

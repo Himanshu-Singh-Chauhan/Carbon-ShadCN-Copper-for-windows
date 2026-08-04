@@ -21,6 +21,7 @@ interface SettingsDialogProps {
   settings: CarbonSettings;
   dataPath: string;
   onUpdate: (settings: Partial<CarbonSettings>) => void;
+  onShortcutRecordingChange: (recording: boolean) => void;
   onChooseDataPath: () => Promise<void>;
   onRevealData: () => void;
 }
@@ -38,6 +39,7 @@ export function SettingsDialog({
   settings,
   dataPath,
   onUpdate,
+  onShortcutRecordingChange,
   onChooseDataPath,
   onRevealData,
 }: SettingsDialogProps) {
@@ -236,6 +238,7 @@ export function SettingsDialog({
               reservedValue={settings.showWindowHotkey}
               reservedLabel="Show Carbon"
               onChange={(captureHotkey) => onUpdate({ captureHotkey })}
+              onRecordingChange={onShortcutRecordingChange}
             />
             <div className="my-3 h-px bg-line" />
             <ShortcutRecorder
@@ -245,6 +248,7 @@ export function SettingsDialog({
               reservedValue={settings.captureHotkey}
               reservedLabel="Capture selection"
               onChange={(showWindowHotkey) => onUpdate({ showWindowHotkey })}
+              onRecordingChange={onShortcutRecordingChange}
             />
           </section>
 

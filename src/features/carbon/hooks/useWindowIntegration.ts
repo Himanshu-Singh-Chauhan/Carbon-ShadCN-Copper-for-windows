@@ -8,7 +8,12 @@ import type {
   CarbonSettings,
   WindowBounds,
 } from "../../../lib/model";
-import { isTauri, markMainWindowReady } from "../../../lib/native";
+import {
+  isTauri,
+  markMainWindowReady,
+  takeMainNavigation,
+  type MainNavigationPayload,
+} from "../../../lib/native";
 import { useCarbonStore } from "../../../lib/store";
 import type { Notify } from "../types";
 
@@ -33,11 +38,13 @@ export function useWindowIntegration({
   settings,
   updateSettings,
   notify,
+  onNavigateToItem,
 }: {
   hydrated: boolean;
   settings: CarbonSettings;
   updateSettings: ReturnType<typeof useCarbonStore.getState>["updateSettings"];
   notify: Notify;
+  onNavigateToItem: (payload: MainNavigationPayload) => void;
 }) {
   useEffect(() => {
     if (!hydrated || !isTauri()) return;
@@ -132,6 +139,25 @@ export function useWindowIntegration({
     // Bounds are intentionally restored only once after hydration.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !isTauri()) return;
+    let cleanup: (() => void) | undefined;
+
+    async function consumePendingNavigation() {
+      const payload = await takeMainNavigation();
+      if (payload) onNavigateToItem(payload);
+    }
+
+    void listen("main-navigation-requested", () => {
+      void consumePendingNavigation();
+    }).then((unlisten) => {
+      cleanup = unlisten;
+      void consumePendingNavigation();
+    });
+
+    return () => cleanup?.();
+  }, [hydrated, onNavigateToItem]);
 
   useEffect(() => {
     if (!hydrated || !isTauri()) return;

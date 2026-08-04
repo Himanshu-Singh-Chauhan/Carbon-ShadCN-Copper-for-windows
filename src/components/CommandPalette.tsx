@@ -1,6 +1,7 @@
 import {
   Add01Icon,
   CheckmarkCircle02Icon,
+  Delete02Icon,
   File01Icon,
   Folder02Icon,
   Moon02Icon,
@@ -14,6 +15,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ALL_SECTIONS, type CarbonSection } from "../lib/model";
 import { cn } from "../lib/utils";
 import { Icon, type IconData } from "./ui/icon";
+import { DeleteBucketDialog } from "./DeleteBucketDialog";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -22,6 +24,7 @@ interface CommandPaletteProps {
   activeBucketId: string;
   onSelectBucket: (id: string) => void;
   onCreateBucket: (name: string) => void;
+  onDeleteBucket: (id: string) => void;
   onOpenSettings: () => void;
   onSetTheme: (theme: "light" | "dark") => void;
 }
@@ -34,6 +37,7 @@ type Command = {
   icon: IconData;
   run: () => void;
   active?: boolean;
+  bucket?: CarbonSection;
 };
 
 export function CommandPalette({
@@ -43,11 +47,14 @@ export function CommandPalette({
   activeBucketId,
   onSelectBucket,
   onCreateBucket,
+  onDeleteBucket,
   onOpenSettings,
   onSetTheme,
 }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
+  const [bucketPendingDeletion, setBucketPendingDeletion] =
+    useState<CarbonSection | null>(null);
 
   const commands = useMemo<Command[]>(
     () => [
@@ -69,6 +76,7 @@ export function CommandPalette({
         group: "Buckets" as const,
         icon: Folder02Icon,
         active: activeBucketId === bucket.id,
+        bucket,
         run: () => onSelectBucket(bucket.id),
       })),
       {
@@ -121,22 +129,34 @@ export function CommandPalette({
     onOpenChange(false);
   }
 
+  function requestBucketDeletion(bucket: CarbonSection) {
+    setQuery("");
+    onOpenChange(false);
+    if (bucket.items.length === 0) {
+      onDeleteBucket(bucket.id);
+    } else {
+      setBucketPendingDeletion(bucket);
+    }
+  }
+
   return (
-    <DialogPrimitive.Root
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setQuery("");
-        onOpenChange(next);
-      }}
-    >
-      <DialogPrimitive.Portal>
-        <DialogPrimitive.Close asChild>
-          <DialogPrimitive.Overlay className="fixed inset-0 z-40 cursor-default rounded-2xl bg-black/45 backdrop-blur-[2px]" />
-        </DialogPrimitive.Close>
-        <DialogPrimitive.Content
-          className="fixed left-1/2 top-1/2 z-50 isolate flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-surface-raised text-ink shadow-float outline-none"
-          aria-describedby={undefined}
-        >
+    <>
+      <DialogPrimitive.Root
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) setQuery("");
+          onOpenChange(next);
+        }}
+      >
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay
+            className="fixed inset-0 z-40 cursor-default rounded-2xl bg-black/45 backdrop-blur-[2px]"
+            data-no-window-drag
+          />
+          <DialogPrimitive.Content
+            className="fixed left-1/2 top-1/2 z-50 isolate flex max-h-[calc(100vh-24px)] w-[calc(100vw-24px)] max-w-[520px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-line bg-surface-raised text-ink shadow-float outline-none"
+            aria-describedby={undefined}
+          >
           <DialogPrimitive.Title className="sr-only">
             Carbon commands
           </DialogPrimitive.Title>
@@ -193,8 +213,7 @@ export function CommandPalette({
                     );
                     const active = resultIndex === activeIndex;
                     return (
-                      <button
-                        type="button"
+                      <div
                         className={cn(
                           "flex w-full cursor-pointer items-center gap-3 rounded-xl px-2.5 py-2 text-left outline-none transition-colors",
                           active
@@ -202,37 +221,55 @@ export function CommandPalette({
                             : "hover:bg-surface-hover",
                         )}
                         key={command.id}
-                        onClick={() => run(command)}
                         onMouseEnter={() => setActiveIndex(resultIndex)}
                       >
-                        <span
-                          className={cn(
-                            "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border",
-                            active
-                              ? "border-accent/20 bg-surface-raised text-accent"
-                              : "border-line bg-surface text-muted",
-                          )}
+                        <button
+                          type="button"
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left outline-none"
+                          onClick={() => run(command)}
                         >
-                          <Icon icon={command.icon} size={17} />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <strong className="block truncate text-sm font-medium text-ink">
-                            {command.label}
-                          </strong>
-                          {command.detail && (
-                            <small className="mt-0.5 block truncate text-xs text-muted">
-                              {command.detail}
-                            </small>
+                          <span
+                            className={cn(
+                              "inline-flex size-8 shrink-0 items-center justify-center rounded-lg border",
+                              active
+                                ? "border-accent/20 bg-surface-raised text-accent"
+                                : "border-line bg-surface text-muted",
+                            )}
+                          >
+                            <Icon icon={command.icon} size={17} />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <strong className="block truncate text-sm font-medium text-ink">
+                              {command.label}
+                            </strong>
+                            {command.detail && (
+                              <small className="mt-0.5 block truncate text-xs text-muted">
+                                {command.detail}
+                              </small>
+                            )}
+                          </span>
+                          {command.active && (
+                            <Icon
+                              className="shrink-0 text-accent"
+                              icon={CheckmarkCircle02Icon}
+                              size={16}
+                            />
                           )}
-                        </span>
-                        {command.active && (
-                          <Icon
-                            className="shrink-0 text-accent"
-                            icon={CheckmarkCircle02Icon}
-                            size={16}
-                          />
+                        </button>
+                        {command.bucket && (
+                          <button
+                            type="button"
+                            className="inline-flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-lg text-faint outline-none transition-colors hover:bg-danger-soft hover:text-danger focus-visible:ring-2 focus-visible:ring-danger/30"
+                            onClick={() =>
+                              requestBucketDeletion(command.bucket!)
+                            }
+                            aria-label={`Delete ${command.bucket.name}`}
+                            title={`Delete ${command.bucket.name}`}
+                          >
+                            <Icon icon={Delete02Icon} size={15} />
+                          </button>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>
@@ -269,8 +306,17 @@ export function CommandPalette({
               Type # Name to create a bucket
             </span>
           </div>
-        </DialogPrimitive.Content>
-      </DialogPrimitive.Portal>
-    </DialogPrimitive.Root>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+
+      <DeleteBucketDialog
+        bucket={bucketPendingDeletion}
+        onConfirm={onDeleteBucket}
+        onOpenChange={(next) => {
+          if (!next) setBucketPendingDeletion(null);
+        }}
+      />
+    </>
   );
 }

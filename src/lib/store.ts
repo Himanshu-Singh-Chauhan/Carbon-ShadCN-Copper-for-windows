@@ -8,6 +8,7 @@ import {
   type CarbonItem,
   type CarbonItemSource,
   type CarbonSettings,
+  type DoneViewMode,
   type NoteSortMode,
   createDefaultDocument,
 } from "./model";
@@ -37,7 +38,7 @@ interface CarbonState extends CarbonDocument {
   renameSection: (sectionId: string, name: string) => void;
   deleteSection: (sectionId: string) => void;
   setActiveSection: (sectionId: string) => void;
-  toggleItem: (itemId: string) => void;
+  setItemsCompleted: (itemIds: string[], completed: boolean) => void;
   removeItemSource: (itemId: string) => void;
   updateItem: (
     itemId: string,
@@ -52,6 +53,7 @@ interface CarbonState extends CarbonDocument {
   ) => void;
   reorderItem: (sectionId: string, activeId: string, overId: string) => void;
   setSectionSortMode: (sectionId: string, sortMode: NoteSortMode) => void;
+  setDoneViewMode: (sectionId: string, mode: DoneViewMode) => void;
   setSelected: (ids: string[]) => void;
   toggleSelected: (id: string) => void;
   clearSelected: () => void;
@@ -180,23 +182,30 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
 
   deleteSection: (sectionId) =>
     set((state) => {
-      if (state.sections.length <= 1) return state;
-      const source = state.sections.find((section) => section.id === sectionId);
-      const destination = state.sections.find(
+      if (!state.sections.some((section) => section.id === sectionId)) {
+        return state;
+      }
+      const remainingSections = state.sections.filter(
         (section) => section.id !== sectionId,
       );
-      if (!source || !destination) return state;
+      if (remainingSections.length === 0) {
+        remainingSections.push({
+          id: createId("section"),
+          name: "Inbox",
+          sortMode: "manual",
+          items: [],
+        });
+      }
       return {
-        sections: state.sections
-          .filter((section) => section.id !== sectionId)
-          .map((section) =>
-            section.id === destination.id
-              ? { ...section, items: [...section.items, ...source.items] }
-              : section,
+        doneViewBySection: Object.fromEntries(
+          Object.entries(state.doneViewBySection).filter(
+            ([key]) => key !== sectionId,
           ),
+        ),
+        sections: remainingSections,
         activeSectionId:
           state.activeSectionId === sectionId
-            ? destination.id
+            ? remainingSections[0].id
             : state.activeSectionId,
         selectedIds: [],
       };
@@ -205,18 +214,16 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
   setActiveSection: (activeSectionId) =>
     set({ activeSectionId, selectedIds: [] }),
 
-  toggleItem: (itemId) =>
-    set((state) => ({
-      sections: mapItems(state.sections, (item) =>
-        item.id === itemId
-          ? {
-              ...item,
-              completed: !item.completed,
-              updatedAt: new Date().toISOString(),
-            }
-          : item,
-      ),
-    })),
+  setItemsCompleted: (itemIds, completed) =>
+    set((state) => {
+      const changing = new Set(itemIds);
+      const completedAt = completed ? new Date().toISOString() : undefined;
+      return {
+        sections: mapItems(state.sections, (item) =>
+          changing.has(item.id) ? { ...item, completed, completedAt } : item,
+        ),
+      };
+    }),
 
   removeItemSource: (itemId) =>
     set((state) => ({
@@ -304,6 +311,15 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
       ),
     })),
 
+  setDoneViewMode: (sectionId, mode) =>
+    set((state) => ({
+      doneViewBySection: {
+        ...state.doneViewBySection,
+        [sectionId]: mode,
+      },
+      selectedIds: [],
+    })),
+
   setSelected: (selectedIds) => set({ selectedIds }),
 
   toggleSelected: (id) =>
@@ -324,6 +340,7 @@ export function getCarbonDocument(): CarbonDocument {
   return {
     version: 2,
     activeSectionId: state.activeSectionId,
+    doneViewBySection: state.doneViewBySection,
     sections: state.sections,
     settings: state.settings,
   };

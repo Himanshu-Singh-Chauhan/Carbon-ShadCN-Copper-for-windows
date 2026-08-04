@@ -7,7 +7,10 @@ import {
   type PointerEvent,
 } from "react";
 import { Icon } from "../../components/ui/icon";
-import { ALL_SECTIONS, type CarbonAttachment } from "../../lib/model";
+import {
+  ALL_SECTIONS,
+  type CarbonAttachment,
+} from "../../lib/model";
 import {
   chooseDataPath,
   isTauri,
@@ -33,6 +36,8 @@ import { SelectionToolbar } from "./components/SelectionToolbar";
 import { useCarbonContextMenus } from "./hooks/useCarbonContextMenus";
 import { useCarbonKeyboard } from "./hooks/useCarbonKeyboard";
 import { useCarbonPersistence } from "./hooks/useCarbonPersistence";
+import { useAppToasts } from "./hooks/useAppToasts";
+import { useDoneItems } from "./hooks/useDoneItems";
 import { useDraftComposer } from "./hooks/useDraftComposer";
 import { useDropToAdd } from "./hooks/useDropToAdd";
 import { useExternalInputSource } from "./hooks/useExternalInputSource";
@@ -42,7 +47,6 @@ import { useNativeShortcuts } from "./hooks/useNativeShortcuts";
 import { useTheme } from "./hooks/useTheme";
 import { useWindowIntegration } from "./hooks/useWindowIntegration";
 import { useVisibleNotes } from "./hooks/useVisibleNotes";
-import type { ToastMessage } from "./types";
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -56,6 +60,7 @@ function fileAsDataUrl(file: File) {
 export function CarbonApp() {
   const {
     activeSectionId,
+    doneViewBySection,
     sections,
     settings,
     hydrated,
@@ -64,14 +69,16 @@ export function CarbonApp() {
     addEntry,
     addItem,
     createSection,
+    deleteSection,
     setActiveSection,
-    toggleItem,
+    setItemsCompleted,
     removeItemSource,
     updateItem,
     deleteItems,
     moveItems,
     reorderItem,
     setSectionSortMode,
+    setDoneViewMode,
     setSelected,
     toggleSelected,
     clearSelected,
@@ -81,12 +88,21 @@ export function CarbonApp() {
   const [query, setQuery] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcutRecording, setShortcutRecording] = useState(false);
+  const [deleteDoneOpen, setDeleteDoneOpen] = useState(false);
   const [dataPath, setDataPath] = useState("Loading local data…");
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
   const [captureReady, setCaptureReady] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
-  const toastId = useRef(0);
+  const doneViewMode = doneViewBySection[activeSectionId] ?? "active";
+  const {
+    dismissToast,
+    notify,
+    notifyWithAction,
+    setToasts,
+    toastId,
+    toasts,
+  } = useAppToasts();
   const {
     contextItem,
     contextMenu,
@@ -105,20 +121,22 @@ export function CarbonApp() {
     setFocusedItemId,
   });
 
-  const notify = useCallback(
-    (message: string, kind: ToastMessage["kind"] = "default") => {
-      const id = ++toastId.current;
-      setToasts((current) => [...current.slice(-2), { id, message, kind }]);
-      window.setTimeout(
-        () => setToasts((current) => current.filter((toast) => toast.id !== id)),
-        2600,
-      );
-    },
-    [],
-  );
+  const { setDoneState, setDoneStateForIds } = useDoneItems({
+    clearSelected,
+    notify,
+    notifyWithAction,
+    setFocusedItemId,
+    setItemsCompleted,
+  });
 
   const revealAddedItem = useCallback(
     (added: AddedItem) => {
+      if (
+        (useCarbonStore.getState().doneViewBySection[activeSectionId] ??
+          "active") === "done"
+      ) {
+        setDoneViewMode(activeSectionId, "active");
+      }
       setQuery("");
       setFocusedItemId(added.item.id);
       clearSelected();
@@ -132,7 +150,7 @@ export function CarbonApp() {
         });
       });
     },
-    [clearSelected],
+    [activeSectionId, clearSelected, setDoneViewMode],
   );
 
   const revealPastedItem = useCallback(
@@ -188,10 +206,9 @@ export function CarbonApp() {
   });
   useTheme(settings.theme);
   useExternalInputSource(hydrated);
-  useWindowIntegration({ hydrated, settings, updateSettings, notify });
   useNativeShortcuts({
     captureHotkey: settings.captureHotkey,
-    enabled: !settingsOpen,
+    enabled: !shortcutRecording,
     hydrated,
     notify,
     onReadyChange: setCaptureReady,
@@ -201,13 +218,58 @@ export function CarbonApp() {
   const {
     allVisibleItems,
     clearSourceFilter,
+    clearSourceFilterFor,
+    doneCount,
     itemCount,
     selectedSourceKeys,
     sourceFilterOptions,
     sourceSections,
     toggleSourceFilter,
+    viewItemCount,
     visibleSections,
-  } = useVisibleNotes({ activeSectionId, query, sections });
+  } = useVisibleNotes({
+    activeSectionId,
+    doneViewMode,
+    query,
+    sections,
+  });
+
+  const navigateToItem = useCallback(
+    ({ bucketId, itemId }: { bucketId: string; itemId: string }) => {
+      setCommandOpen(false);
+      setSettingsOpen(false);
+      setDeleteDoneOpen(false);
+      setActiveSection(bucketId);
+      setDoneViewMode(bucketId, "active");
+      clearSourceFilterFor(bucketId);
+      setQuery("");
+      clearSelected();
+      setFocusedItemId(itemId);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          const card = Array.from(
+            document.querySelectorAll<HTMLElement>("[data-item-id]"),
+          ).find((element) => element.dataset.itemId === itemId);
+          card?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      });
+    },
+    [
+      clearSelected,
+      clearSourceFilterFor,
+      setActiveSection,
+      setDoneViewMode,
+    ],
+  );
+
+  useWindowIntegration({
+    hydrated,
+    settings,
+    updateSettings,
+    notify,
+    onNavigateToItem: navigateToItem,
+  });
 
   const {
     copyItems,
@@ -240,7 +302,7 @@ export function CarbonApp() {
     setSelected,
     setSettingsOpen,
     startEditing,
-    toggleItem,
+    toggleItems: setDoneStateForIds,
   });
 
   function startWindowDrag(event: PointerEvent<HTMLElement>) {
@@ -331,6 +393,11 @@ export function CarbonApp() {
     activeSectionId === ALL_SECTIONS
       ? sections[0]?.name ?? "Inbox"
       : activeName;
+  const doneItemsInScope = sourceSections.flatMap((section) =>
+    section.items.filter((item) => item.completed),
+  );
+  const deleteDoneScopeName =
+    activeSectionId === ALL_SECTIONS ? "all buckets" : activeName;
   if (!hydrated) {
     return (
       <main className="flex h-full items-center justify-center rounded-2xl border border-line bg-canvas text-muted ring-4 ring-inset ring-line/60">
@@ -360,7 +427,9 @@ export function CarbonApp() {
         activeBucketId={activeSectionId}
         activeName={activeName}
         buckets={sections}
-        itemCount={itemCount}
+        doneCount={doneCount}
+        doneViewMode={doneViewMode}
+        itemCount={viewItemCount}
         query={query}
         searchRef={searchRef}
         settings={settings}
@@ -376,6 +445,10 @@ export function CarbonApp() {
         onClearQuery={() => setQuery("")}
         onClearSourceFilter={clearSourceFilter}
         onCopyMarkdown={() => void copyMarkdown()}
+        onDeleteAllDone={() => setDeleteDoneOpen(true)}
+        onDoneViewModeChange={(mode) =>
+          setDoneViewMode(activeSectionId, mode)
+        }
         onOpenCommands={() => setCommandOpen(true)}
         onMinimizeToTray={() => void minimizeToTray()}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -396,6 +469,8 @@ export function CarbonApp() {
         captureReady={captureReady}
         focusedItemId={focusedItemId}
         itemCount={itemCount}
+        viewItemCount={viewItemCount}
+        doneViewMode={doneViewMode}
         query={query}
         showCreatedAt={settings.showCreatedAt}
         showItemSources={settings.showItemSources}
@@ -439,7 +514,12 @@ export function CarbonApp() {
             setMarkdownTaskChecked(item.text, taskIndex, checked),
           )
         }
-        onToggle={toggleItem}
+        onToggle={(itemId) => {
+          const item = sections
+            .flatMap((section) => section.items)
+            .find((candidate) => candidate.id === itemId);
+          if (item) setDoneState([item], !item.completed);
+        }}
       />
 
       {selectedItems.length > 0 && (
@@ -449,6 +529,10 @@ export function CarbonApp() {
           onClear={clearSelected}
           onCopy={() => void copySelectedItems()}
           onDelete={() => deleteItems()}
+          onToggleDone={() => setDoneState(selectedItems)}
+          toggleDoneLabel={
+            selectedItems.every((item) => item.completed) ? "Restore" : "Done"
+          }
         />
       )}
 
@@ -477,6 +561,9 @@ export function CarbonApp() {
       <CarbonOverlays
         activeSectionId={activeSectionId}
         commandOpen={commandOpen}
+        deleteDoneCount={doneCount}
+        deleteDoneOpen={deleteDoneOpen}
+        deleteDoneScopeName={deleteDoneScopeName}
         contextItem={contextItem}
         contextMenu={contextMenu}
         contextSelectedItems={contextSelectedItems}
@@ -515,16 +602,37 @@ export function CarbonApp() {
           setContextMenu(null);
         }}
         onContextToggle={() => {
-          contextSelectedItems.forEach((item) => toggleItem(item.id));
+          setDoneState(
+            contextSelectedItems,
+            contextItem ? !contextItem.completed : undefined,
+          );
           setContextMenu(null);
         }}
+        onDeleteAllDone={() => {
+          deleteItems(doneItemsInScope.map((item) => item.id));
+          notify(
+            doneItemsInScope.length === 1
+              ? "Deleted Done item"
+              : `Deleted ${doneItemsInScope.length} Done items`,
+          );
+        }}
+        onDeleteDoneOpenChange={setDeleteDoneOpen}
+        onDismissToast={dismissToast}
         onCreateSection={createSection}
+        onDeleteSection={(sectionId) => {
+          const section = sections.find(
+            (candidate) => candidate.id === sectionId,
+          );
+          deleteSection(sectionId);
+          if (section) notify(`Deleted ${section.name}`);
+        }}
         onOpenCommandChange={setCommandOpen}
         onOpenSettings={() => setSettingsOpen(true)}
         onPaste={() => void pasteFromClipboard()}
         onRevealData={() => void revealLocalData()}
         onSelectSection={setActiveSection}
         onSettingsOpenChange={setSettingsOpen}
+        onShortcutRecordingChange={setShortcutRecording}
         onThemeChange={(theme) => updateSettings({ theme })}
         onUpdateSettings={updateSettings}
       />

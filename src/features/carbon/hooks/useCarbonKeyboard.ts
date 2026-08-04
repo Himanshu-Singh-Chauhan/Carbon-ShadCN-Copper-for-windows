@@ -18,7 +18,7 @@ export function useCarbonKeyboard({
   setSelected,
   setSettingsOpen,
   startEditing,
-  toggleItem,
+  toggleItems,
 }: {
   allVisibleItems: CarbonItem[];
   clearSelected: () => void;
@@ -35,7 +35,7 @@ export function useCarbonKeyboard({
   setSelected: (ids: string[]) => void;
   setSettingsOpen: (open: boolean) => void;
   startEditing: (item: CarbonItem) => void;
-  toggleItem: (id: string) => void;
+  toggleItems: (ids: string[]) => void;
 }) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -70,7 +70,7 @@ export function useCarbonKeyboard({
         deleteItems();
       } else if (event.key === " " && selectedIds.length) {
         event.preventDefault();
-        selectedIds.forEach(toggleItem);
+        toggleItems(selectedIds);
       } else if (event.key === "Enter" && focusedItemId) {
         const item = sections
           .flatMap((section) => section.items)
@@ -105,6 +105,6 @@ export function useCarbonKeyboard({
     setSelected,
     setSettingsOpen,
     startEditing,
-    toggleItem,
+    toggleItems,
   ]);
 }

@@ -74,6 +74,7 @@ export function ShortcutRecorder({
   reservedValue,
   reservedLabel,
   onChange,
+  onRecordingChange,
 }: {
   label: string;
   description: string;
@@ -81,6 +82,7 @@ export function ShortcutRecorder({
   reservedValue: string;
   reservedLabel: string;
   onChange: (value: string) => void;
+  onRecordingChange?: (recording: boolean) => void;
 }) {
   const [recording, setRecording] = useState(false);
   const [prompt, setPrompt] = useState("Press shortcut…");
@@ -91,8 +93,21 @@ export function ShortcutRecorder({
 
   useEffect(() => {
     setRecording(false);
+    onRecordingChange?.(false);
     setError(undefined);
-  }, [value]);
+  }, [onRecordingChange, value]);
+
+  useEffect(
+    () => () => {
+      onRecordingChange?.(false);
+    },
+    [onRecordingChange],
+  );
+
+  function changeRecording(next: boolean) {
+    setRecording(next);
+    onRecordingChange?.(next);
+  }
 
   function commit(next: string) {
     if (next === reservedValue) {
@@ -100,7 +115,7 @@ export function ShortcutRecorder({
       setPrompt("Press another shortcut…");
       return;
     }
-    setRecording(false);
+    changeRecording(false);
     setError(undefined);
     lastModifier.current = undefined;
     onChange(next);
@@ -111,7 +126,7 @@ export function ShortcutRecorder({
     event.preventDefault();
     event.stopPropagation();
     if (event.key === "Escape") {
-      setRecording(false);
+      changeRecording(false);
       setPrompt("Press shortcut…");
       lastModifier.current = undefined;
       return;
@@ -163,12 +178,12 @@ export function ShortcutRecorder({
         aria-label={`${label}: ${formatShortcut(value)}. Click to record a new shortcut.`}
         aria-pressed={recording}
         onBlur={() => {
-          setRecording(false);
+          changeRecording(false);
           setPrompt("Press shortcut…");
           lastModifier.current = undefined;
         }}
         onClick={() => {
-          setRecording((current) => !current);
+          changeRecording(!recording);
           setPrompt("Press shortcut…");
           setError(undefined);
           lastModifier.current = undefined;

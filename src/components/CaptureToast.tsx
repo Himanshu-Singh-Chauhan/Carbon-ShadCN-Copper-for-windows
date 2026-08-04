@@ -58,8 +58,28 @@ function SavedCaptureNotification({
     setMenuOpen(open);
   }
 
+  async function openCapturedItem() {
+    await invoke("show_captured_item", {
+      bucketId,
+      itemId: payload.itemId,
+    });
+    toast.dismiss(toastId);
+  }
+
   return (
-    <div className="flex w-[336px] items-center gap-3 rounded-2xl border border-line bg-surface-raised p-3 shadow-float">
+    <div
+      className="flex w-[336px] cursor-pointer items-center gap-3 rounded-2xl border border-line bg-surface-raised p-3 shadow-float"
+      onDoubleClick={(event) => {
+        if (
+          event.target instanceof Element &&
+          event.target.closest("button, [role=menu]")
+        ) {
+          return;
+        }
+        void openCapturedItem();
+      }}
+      title="Double-click to open captured item"
+    >
       <div className="inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
         <Icon icon={CheckmarkCircle02Icon} size={19} strokeWidth={2.4} />
       </div>
@@ -77,6 +97,7 @@ function SavedCaptureNotification({
             type="button"
             className="inline-flex h-8 max-w-32 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface px-2 text-xs font-medium text-muted outline-none transition-colors hover:border-line-strong hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35 data-[state=open]:bg-surface-hover"
             aria-label={`Change bucket. Currently ${bucketName}`}
+            onDoubleClick={(event) => event.stopPropagation()}
           >
             <Icon className="shrink-0" icon={InboxIcon} size={14} />
             <span className="truncate">{bucketName}</span>

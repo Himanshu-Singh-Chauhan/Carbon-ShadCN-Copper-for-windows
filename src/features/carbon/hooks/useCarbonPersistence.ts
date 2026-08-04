@@ -43,6 +43,7 @@ export function useCarbonPersistence({
       if (
         state.sections === previous.sections &&
         state.activeSectionId === previous.activeSectionId &&
+        state.doneViewBySection === previous.doneViewBySection &&
         state.settings === previous.settings
       ) {
         return;

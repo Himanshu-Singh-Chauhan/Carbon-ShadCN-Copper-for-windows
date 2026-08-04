@@ -7,7 +7,13 @@ import { Icon } from "../../../components/ui/icon";
 import { cn } from "../../../lib/utils";
 import type { ToastMessage } from "../types";
 
-export function ToastRegion({ toasts }: { toasts: ToastMessage[] }) {
+export function ToastRegion({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastMessage[];
+  onDismiss: (id: number) => void;
+}) {
   return (
     <div
       className="pointer-events-none fixed bottom-4 left-1/2 z-[90] flex w-[calc(100%-32px)] max-w-sm -translate-x-1/2 flex-col items-center gap-2"
@@ -36,6 +42,18 @@ export function ToastRegion({ toasts }: { toasts: ToastMessage[] }) {
             size={15}
           />
           <span className="min-w-0 break-words">{toast.message}</span>
+          {toast.action && (
+            <button
+              type="button"
+              className="pointer-events-auto ml-1 cursor-pointer rounded-lg px-1.5 py-1 text-xs font-semibold text-accent outline-none transition-colors hover:bg-accent-soft focus-visible:ring-2 focus-visible:ring-accent/35"
+              onClick={() => {
+                toast.action?.onClick();
+                onDismiss(toast.id);
+              }}
+            >
+              {toast.action.label}
+            </button>
+          )}
         </div>
       ))}
     </div>

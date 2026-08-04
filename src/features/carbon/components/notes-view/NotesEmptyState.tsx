@@ -82,3 +82,19 @@ export function NotesEmptyState({
     </div>
   );
 }
+
+export function DoneEmptyState() {
+  return (
+    <div className="flex min-h-72 flex-col items-center justify-center px-6 text-center">
+      <span className="mb-4 inline-flex size-11 items-center justify-center rounded-2xl border border-line bg-surface-raised text-accent shadow-sm">
+        <Icon icon={SparklesIcon} size={20} />
+      </span>
+      <strong className="text-sm font-semibold text-ink">
+        Nothing waiting to be cleared
+      </strong>
+      <p className="mt-1.5 max-w-60 text-xs leading-5 text-muted">
+        Items you finish will wait here until you restore or delete them.
+      </p>
+    </div>
+  );
+}

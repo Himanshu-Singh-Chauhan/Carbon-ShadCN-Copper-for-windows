@@ -4,6 +4,10 @@ export type ToastMessage = {
   id: number;
   message: string;
   kind?: "default" | "error" | "loading";
+  action?: {
+    label: string;
+    onClick: () => void;
+  };
 };
 
 export type Notify = (

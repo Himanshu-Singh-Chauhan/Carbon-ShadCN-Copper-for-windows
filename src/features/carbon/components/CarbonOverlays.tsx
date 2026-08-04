@@ -9,11 +9,15 @@ import type {
 import { ItemContextMenu } from "./ItemContextMenu";
 import { PasteContextMenu } from "./PasteContextMenu";
 import { ToastRegion } from "./ToastRegion";
+import { DeleteDoneDialog } from "./DeleteDoneDialog";
 import type { ContextMenuState, ToastMessage } from "../types";
 
 type CarbonOverlaysProps = {
   activeSectionId: string;
   commandOpen: boolean;
+  deleteDoneCount: number;
+  deleteDoneOpen: boolean;
+  deleteDoneScopeName: string;
   contextItem?: CarbonItem;
   contextMenu: ContextMenuState;
   contextSelectedItems: CarbonItem[];
@@ -30,13 +34,18 @@ type CarbonOverlaysProps = {
   onContextMove: (sectionId: string) => void;
   onContextRemoveSource: () => void;
   onContextToggle: () => void;
+  onDeleteAllDone: () => void;
+  onDeleteDoneOpenChange: (open: boolean) => void;
+  onDismissToast: (id: number) => void;
   onCreateSection: (name: string) => void;
+  onDeleteSection: (sectionId: string) => void;
   onOpenCommandChange: (open: boolean) => void;
   onOpenSettings: () => void;
   onPaste: () => void;
   onRevealData: () => void;
   onSelectSection: (sectionId: string) => void;
   onSettingsOpenChange: (open: boolean) => void;
+  onShortcutRecordingChange: (recording: boolean) => void;
   onThemeChange: (theme: Theme) => void;
   onUpdateSettings: (patch: Partial<CarbonSettings>) => void;
 };
@@ -44,6 +53,9 @@ type CarbonOverlaysProps = {
 export function CarbonOverlays({
   activeSectionId,
   commandOpen,
+  deleteDoneCount,
+  deleteDoneOpen,
+  deleteDoneScopeName,
   contextItem,
   contextMenu,
   contextSelectedItems,
@@ -60,13 +72,18 @@ export function CarbonOverlays({
   onContextMove,
   onContextRemoveSource,
   onContextToggle,
+  onDeleteAllDone,
+  onDeleteDoneOpenChange,
+  onDismissToast,
   onCreateSection,
+  onDeleteSection,
   onOpenCommandChange,
   onOpenSettings,
   onPaste,
   onRevealData,
   onSelectSection,
   onSettingsOpenChange,
+  onShortcutRecordingChange,
   onThemeChange,
   onUpdateSettings,
 }: CarbonOverlaysProps) {
@@ -79,6 +96,7 @@ export function CarbonOverlays({
         activeBucketId={activeSectionId}
         onSelectBucket={onSelectSection}
         onCreateBucket={onCreateSection}
+        onDeleteBucket={onDeleteSection}
         onOpenSettings={onOpenSettings}
         onSetTheme={onThemeChange}
       />
@@ -89,8 +107,17 @@ export function CarbonOverlays({
         settings={settings}
         dataPath={dataPath}
         onUpdate={onUpdateSettings}
+        onShortcutRecordingChange={onShortcutRecordingChange}
         onChooseDataPath={onChooseDataPath}
         onRevealData={onRevealData}
+      />
+
+      <DeleteDoneDialog
+        count={deleteDoneCount}
+        open={deleteDoneOpen}
+        scopeName={deleteDoneScopeName}
+        onConfirm={onDeleteAllDone}
+        onOpenChange={onDeleteDoneOpenChange}
       />
 
       {contextMenu && contextItem && (
@@ -116,7 +143,7 @@ export function CarbonOverlays({
         />
       )}
 
-      <ToastRegion toasts={toasts} />
+      <ToastRegion toasts={toasts} onDismiss={onDismissToast} />
     </>
   );
 }

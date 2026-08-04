@@ -73,6 +73,7 @@ fn default_document() -> Value {
     json!({
         "version": 2,
         "activeSectionId": "all",
+        "doneViewBySection": {},
         "sections": [{
             "id": section_id,
             "name": "Inbox",

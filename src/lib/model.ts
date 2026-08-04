@@ -2,6 +2,7 @@ import { createId } from "./utils";
 
 export type Theme = "light" | "dark";
 export type NoteSortMode = "manual" | "created-desc" | "created-asc";
+export type DoneViewMode = "active" | "all" | "done";
 export type DoubleClickAction = "copy" | "edit";
 export type CapturePlacement = "top" | "bottom";
 
@@ -32,6 +33,7 @@ export interface CarbonItem {
   attachments: CarbonAttachment[];
   source?: CarbonItemSource;
   completed: boolean;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,6 +68,7 @@ export interface CarbonSettings {
 export interface CarbonDocument {
   version: 2;
   activeSectionId: string;
+  doneViewBySection: Record<string, DoneViewMode>;
   sections: CarbonSection[];
   settings: CarbonSettings;
 }
@@ -89,6 +92,7 @@ export function createDefaultDocument(): CarbonDocument {
   return {
     version: 2,
     activeSectionId: ALL_SECTIONS,
+    doneViewBySection: {},
     sections: [
       { id: inboxId, name: "Inbox", sortMode: "manual", items: [] },
     ],
@@ -146,6 +150,9 @@ export function normalizeDocument(value: unknown): CarbonDocument {
                   return {
                     ...item,
                     completed: Boolean(item.completed),
+                    completedAt: item.completed
+                      ? normalizeTimestamp(item.completedAt, item.updatedAt)
+                      : undefined,
                     createdAt,
                     updatedAt: normalizeTimestamp(item.updatedAt, createdAt),
                     attachments: Array.isArray(item.attachments)
@@ -204,6 +211,19 @@ export function normalizeDocument(value: unknown): CarbonDocument {
   return {
     version: 2,
     activeSectionId,
+    doneViewBySection:
+      input.doneViewBySection &&
+      typeof input.doneViewBySection === "object" &&
+      !Array.isArray(input.doneViewBySection)
+        ? Object.fromEntries(
+            Object.entries(input.doneViewBySection).filter(
+              ([key, mode]) =>
+                (key === ALL_SECTIONS ||
+                  sections.some((section) => section.id === key)) &&
+                (mode === "active" || mode === "all" || mode === "done"),
+            ),
+          )
+        : {},
     sections,
     settings: {
       ...fallback.settings,
