@@ -23,7 +23,10 @@ export function MarkdownContent({
     const root = rootRef.current;
     if (!root) return;
     let disposed = false;
-    root.textContent = markdown;
+    const fallback = document.createElement("p");
+    fallback.className = "min-w-0";
+    fallback.textContent = markdown;
+    root.replaceChildren(fallback);
     const displayMarkdown = normalizeMarkdownForRendering(markdown);
 
     void getMarkdownRenderer()
@@ -33,7 +36,11 @@ export function MarkdownContent({
         root.replaceChildren(content);
         highlightMarkdownMatches(root, query);
       })
-      .catch(() => undefined);
+      .catch((error: unknown) => {
+        if (import.meta.env.DEV) {
+          console.error("Failed to render Markdown.", error);
+        }
+      });
 
     return () => {
       disposed = true;

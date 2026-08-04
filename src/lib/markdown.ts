@@ -48,7 +48,10 @@ export function configureMarkdown(ctx: Ctx) {
   ctx.set(paragraphAttr.key, () => ({ class: "min-w-0" }));
   ctx.set(headingAttr.key, () => ({ class: "min-w-0" }));
   ctx.set(blockquoteAttr.key, () => ({ class: "min-w-0" }));
-  ctx.set(codeBlockAttr.key, () => ({ class: "min-w-0" }));
+  ctx.set(codeBlockAttr.key, () => ({
+    pre: { class: "min-w-0" },
+    code: {},
+  }));
   ctx.set(hrAttr.key, () => ({ class: "min-w-0" }));
   ctx.set(imageAttr.key, () => ({
     class: "hidden",
@@ -112,15 +115,23 @@ export function getMarkdownRenderer() {
 
 export function normalizeMarkdownForRendering(markdown: string) {
   const normalized = markdown.replace(/\r\n?|\u2028|\u2029/g, "\n");
-  if (!normalized.includes("\n")) {
-    const capturedFence = normalized.match(
-      /^\s*```([A-Za-z0-9_+-]*)[ \t]+([\s\S]*?)[ \t]+```\s*$/,
-    );
-    if (capturedFence) {
-      const [, language, code] = capturedFence;
-      return `\`\`\`${language}\n${code.trim()}\n\`\`\``;
-    }
+  const capturedMultilineFence = normalized.match(
+    /^\s*```[^\S\n]*([A-Za-z0-9_+-]*)[^\S\n]*\n([\s\S]*?)\n[^\S\n]*```\s*$/,
+  );
+  if (capturedMultilineFence) {
+    const [, language, code] = capturedMultilineFence;
+    return `\`\`\`${language}\n${code}\n\`\`\``;
+  }
 
+  const capturedSingleLineFence = normalized.match(
+    /^\s*```[^\S\n]*([A-Za-z0-9_+-]*)[^\S\n]+(.+?)[^\S\n]+```\s*$/,
+  );
+  if (capturedSingleLineFence) {
+    const [, language, code] = capturedSingleLineFence;
+    return `\`\`\`${language}\n${code.trim()}\n\`\`\``;
+  }
+
+  if (!normalized.includes("\n")) {
     const visualItems = normalized.split(/\s+[•·]\s+/);
     if (visualItems.length >= 3 && visualItems.every((item) => item.trim())) {
       return visualItems.map((item) => `- ${item.trim()}`).join("\n");
