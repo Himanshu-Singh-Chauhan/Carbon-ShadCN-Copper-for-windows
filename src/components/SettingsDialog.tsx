@@ -1,5 +1,8 @@
 import {
+  Add01Icon,
+  ArrowLeft01Icon,
   ArrowDown01Icon,
+  ArrowRight01Icon,
   ArrowUp01Icon,
   Copy01Icon,
   FileEditIcon,
@@ -7,8 +10,16 @@ import {
   Moon02Icon,
   Sun02Icon,
 } from "@hugeicons/core-free-icons";
-import type { CarbonSettings, Theme } from "../lib/model";
-import { cn } from "../lib/utils";
+import { useRef, useState } from "react";
+import { useAssetUrl } from "./AssetImage";
+import { appBackgrounds } from "../lib/appBackgrounds";
+import type {
+  CarbonSettings,
+  CustomAppBackground,
+  Theme,
+} from "../lib/model";
+import { saveImageAsset } from "../lib/native";
+import { cn, createId } from "../lib/utils";
 import { ShortcutRecorder } from "./ShortcutRecorder";
 import { Button } from "./ui/button";
 import { Dialog, DialogContent } from "./ui/dialog";
@@ -21,6 +32,7 @@ interface SettingsDialogProps {
   settings: CarbonSettings;
   dataPath: string;
   onUpdate: (settings: Partial<CarbonSettings>) => void;
+  onEditBackground: () => void;
   onShortcutRecordingChange: (recording: boolean) => void;
   onChooseDataPath: () => Promise<void>;
   onRevealData: () => void;
@@ -32,6 +44,67 @@ const themes: { value: Theme; label: string; icon: IconData }[] = [
 ];
 
 const sectionStyles = "p-3";
+const supportedBackgroundTypes = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+  "image/bmp",
+]);
+
+function BackgroundChoice({
+  value,
+  label,
+  imageUrl,
+  asset,
+  selected,
+  onSelect,
+}: {
+  value: string;
+  label: string;
+  imageUrl?: string;
+  asset?: CustomAppBackground;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const assetUrl = useAssetUrl(asset);
+  const previewUrl = imageUrl ?? assetUrl;
+
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={selected}
+      className={cn(
+        "w-[116px] shrink-0 snap-start cursor-pointer overflow-hidden rounded-xl border bg-surface-raised p-1 text-left outline-none transition-[border-color,box-shadow,transform] active:scale-[0.98] focus-visible:ring-2 focus-visible:ring-accent/35",
+        selected
+          ? "border-accent shadow-sm"
+          : "border-line hover:border-line-strong",
+      )}
+      onClick={onSelect}
+    >
+      <span
+        className={cn(
+          "block aspect-[16/9] overflow-hidden rounded-lg border border-line bg-surface-hover",
+          !previewUrl &&
+            value === "none" &&
+            "bg-[linear-gradient(135deg,var(--surface-hover)_25%,var(--surface)_25%,var(--surface)_50%,var(--surface-hover)_50%,var(--surface-hover)_75%,var(--surface)_75%,var(--surface))] bg-[length:12px_12px]",
+        )}
+      >
+        {previewUrl && (
+          <img
+            className="h-full w-full object-cover"
+            src={previewUrl}
+            alt=""
+          />
+        )}
+      </span>
+      <span className="block truncate px-1 pb-0.5 pt-1.5 text-xs font-medium text-ink">
+        {label}
+      </span>
+    </button>
+  );
+}
 
 export function SettingsDialog({
   open,
@@ -39,10 +112,69 @@ export function SettingsDialog({
   settings,
   dataPath,
   onUpdate,
+  onEditBackground,
   onShortcutRecordingChange,
   onChooseDataPath,
   onRevealData,
 }: SettingsDialogProps) {
+  const backgroundsRef = useRef<HTMLDivElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingBackground, setUploadingBackground] = useState(false);
+  const [backgroundError, setBackgroundError] = useState<string>();
+
+  function scrollBackgrounds(direction: -1 | 1) {
+    backgroundsRef.current?.scrollBy({
+      left: direction * 126,
+      behavior: "smooth",
+    });
+  }
+
+  async function uploadBackground(file: File) {
+    setBackgroundError(undefined);
+    if (!supportedBackgroundTypes.has(file.type)) {
+      setBackgroundError("Choose a PNG, JPEG, WebP, GIF, or BMP image.");
+      return;
+    }
+    if (file.size > 25 * 1024 * 1024) {
+      setBackgroundError("Background images must be smaller than 25 MB.");
+      return;
+    }
+
+    setUploadingBackground(true);
+    try {
+      const id = createId("background");
+      const path = await saveImageAsset(
+        id,
+        file.type,
+        new Uint8Array(await file.arrayBuffer()),
+      );
+      const label =
+        file.name.replace(/\.[^.]+$/, "").trim() || "Custom background";
+      const background: CustomAppBackground = {
+        id,
+        label,
+        path,
+        mimeType: file.type,
+      };
+      onUpdate({
+        customBackgrounds: [...settings.customBackgrounds, background],
+        backgroundImage: id,
+      });
+      window.requestAnimationFrame(() =>
+        backgroundsRef.current?.scrollTo({
+          left: backgroundsRef.current.scrollWidth,
+          behavior: "smooth",
+        }),
+      );
+    } catch (error) {
+      setBackgroundError(
+        error instanceof Error ? error.message : "Could not add this image.",
+      );
+    } finally {
+      setUploadingBackground(false);
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -76,6 +208,122 @@ export function SettingsDialog({
                   <span className="truncate">{label}</span>
                 </button>
               ))}
+            </div>
+            <div className="my-3 h-px bg-line" />
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-xs font-medium text-muted">Background</p>
+              <input
+                ref={uploadInputRef}
+                className="hidden"
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif,image/bmp"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (file) void uploadBackground(file);
+                }}
+              />
+              <button
+                type="button"
+                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-2 text-xs font-medium text-ink outline-none transition-[border-color,transform] active:scale-[0.97] hover:border-line-strong focus-visible:ring-2 focus-visible:ring-accent/35 disabled:cursor-default disabled:opacity-50"
+                disabled={uploadingBackground}
+                onClick={() => uploadInputRef.current?.click()}
+              >
+                <Icon icon={Add01Icon} size={13} />
+                {uploadingBackground ? "Adding…" : "Add image"}
+              </button>
+            </div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <button
+                type="button"
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-line bg-surface-raised text-muted outline-none transition-[border-color,transform] active:scale-[0.94] hover:border-line-strong hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+                aria-label="Scroll backgrounds left"
+                onClick={() => scrollBackgrounds(-1)}
+              >
+                <Icon icon={ArrowLeft01Icon} size={14} />
+              </button>
+              <div
+                ref={backgroundsRef}
+                className="flex min-w-0 flex-1 snap-x snap-mandatory gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                role="radiogroup"
+                aria-label="App background"
+              >
+                {appBackgrounds.map(({ value, label, imageUrl }) => (
+                  <BackgroundChoice
+                    key={value}
+                    value={value}
+                    label={label}
+                    imageUrl={imageUrl}
+                    selected={settings.backgroundImage === value}
+                    onSelect={() => onUpdate({ backgroundImage: value })}
+                  />
+                ))}
+                {settings.customBackgrounds.map((background) => (
+                  <BackgroundChoice
+                    key={background.id}
+                    value={background.id}
+                    label={background.label}
+                    asset={background}
+                    selected={settings.backgroundImage === background.id}
+                    onSelect={() =>
+                      onUpdate({ backgroundImage: background.id })
+                    }
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-line bg-surface-raised text-muted outline-none transition-[border-color,transform] active:scale-[0.94] hover:border-line-strong hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+                aria-label="Scroll backgrounds right"
+                onClick={() => scrollBackgrounds(1)}
+              >
+                <Icon icon={ArrowRight01Icon} size={14} />
+              </button>
+            </div>
+            <button
+              type="button"
+              className="mt-2 inline-flex h-8 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-line bg-surface-raised text-xs font-medium text-ink outline-none transition-[border-color,transform] active:scale-[0.99] hover:border-line-strong focus-visible:ring-2 focus-visible:ring-accent/35 disabled:cursor-default disabled:opacity-45"
+              disabled={settings.backgroundImage === "none"}
+              onClick={onEditBackground}
+            >
+              <Icon icon={FileEditIcon} size={14} />
+              Edit position
+            </button>
+            {backgroundError && (
+              <p className="mt-2 text-[11px] leading-4 text-danger">
+                {backgroundError}
+              </p>
+            )}
+            <div
+              className={cn(
+                "mt-3 rounded-xl border border-line bg-surface-raised px-3 py-2.5 transition-opacity",
+                settings.backgroundImage === "none" && "opacity-50",
+              )}
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-ink">Card blur</p>
+                  <p className="mt-0.5 text-[11px] leading-4 text-muted">
+                    Soften the image behind note cards.
+                  </p>
+                </div>
+                <span className="shrink-0 text-xs tabular-nums text-muted">
+                  {settings.backgroundBlur}px
+                </span>
+              </div>
+              <input
+                className="block h-4 w-full cursor-pointer accent-accent disabled:cursor-default"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={settings.backgroundBlur}
+                disabled={settings.backgroundImage === "none"}
+                aria-label="Card background blur"
+                onChange={(event) =>
+                  onUpdate({ backgroundBlur: Number(event.target.value) })
+                }
+              />
             </div>
           </section>
 

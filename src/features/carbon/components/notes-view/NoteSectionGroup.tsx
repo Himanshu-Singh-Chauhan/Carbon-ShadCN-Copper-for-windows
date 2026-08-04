@@ -79,7 +79,10 @@ export function NoteSectionGroup({
   return (
     <section className="relative min-w-0 max-w-full">
       {showHeader && (
-        <div className="sticky top-[-4px] z-10 -mx-1 mb-0.5 flex items-center gap-2 bg-canvas px-1 py-1.5">
+        <div
+          className="sticky top-[-4px] z-10 -mx-1 mb-0.5 flex items-center gap-2 bg-canvas px-1 py-1.5"
+          data-note-sticky-surface
+        >
           <div className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-line bg-surface-raised px-2 py-1 text-xs font-semibold text-muted shadow-sm">
             <Icon
               className="shrink-0 text-faint"
@@ -112,6 +115,7 @@ export function NoteSectionGroup({
                     "sticky z-[9] -mx-1 flex min-w-0 items-center gap-2 bg-canvas px-1 py-1",
                     showHeader ? "top-[30px]" : "top-[-4px]"
                   )}
+                  data-note-sticky-surface
                 >
                   <div className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-line bg-surface-raised/90 px-2.5 py-0.5 text-[11px] font-semibold text-muted shadow-xs backdrop-blur-xs">
                     <Icon

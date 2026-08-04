@@ -3,8 +3,10 @@ import { useNearViewport } from "../hooks/useNearViewport";
 import type { CarbonAttachment } from "../lib/model";
 import { readImageAsset } from "../lib/native";
 
+type ImageAsset = Pick<CarbonAttachment, "path" | "mimeType">;
+
 export function useAssetUrl(
-  attachment: CarbonAttachment | undefined,
+  attachment: ImageAsset | undefined,
   enabled = true,
 ) {
   const [url, setUrl] = useState<string>();

@@ -5,6 +5,20 @@ export type NoteSortMode = "manual" | "created-desc" | "created-asc";
 export type DoneViewMode = "active" | "all" | "done";
 export type DoubleClickAction = "copy" | "edit";
 export type CapturePlacement = "top" | "bottom";
+export type BuiltInAppBackground = "none" | "scenic-flowers";
+
+export interface CustomAppBackground {
+  id: string;
+  label: string;
+  path: string;
+  mimeType: string;
+}
+
+export interface AppBackgroundPosition {
+  x: number;
+  y: number;
+  zoom: number;
+}
 
 export interface CarbonImageOrigin {
   sourceUrl?: string;
@@ -54,6 +68,10 @@ export interface WindowBounds {
 
 export interface CarbonSettings {
   theme: Theme;
+  backgroundImage: string;
+  customBackgrounds: CustomAppBackground[];
+  backgroundPositions: Record<string, AppBackgroundPosition>;
+  backgroundBlur: number;
   alwaysOnTop: boolean;
   showLinkPreviews: boolean;
   showCreatedAt: boolean;
@@ -99,6 +117,10 @@ export function createDefaultDocument(): CarbonDocument {
     ],
     settings: {
       theme: "light",
+      backgroundImage: "none",
+      customBackgrounds: [],
+      backgroundPositions: {},
+      backgroundBlur: 32,
       alwaysOnTop: true,
       showLinkPreviews: true,
       showCreatedAt: true,
@@ -210,6 +232,63 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       ? input.activeSectionId!
       : ALL_SECTIONS;
 
+  const customBackgrounds = Array.isArray(input.settings?.customBackgrounds)
+    ? input.settings.customBackgrounds.filter(
+        (background): background is CustomAppBackground =>
+          Boolean(
+            background &&
+              typeof background.id === "string" &&
+              background.id.startsWith("background-") &&
+              typeof background.label === "string" &&
+              background.label.trim() &&
+              typeof background.path === "string" &&
+              /^assets\/[^/]+$/.test(background.path) &&
+              typeof background.mimeType === "string" &&
+              /^image\/(png|jpeg|webp|gif|bmp)$/.test(background.mimeType),
+          ),
+      )
+    : [];
+  const requestedBackground = input.settings?.backgroundImage;
+  const backgroundImage =
+    typeof requestedBackground === "string" &&
+    (requestedBackground === "scenic-flowers" ||
+      customBackgrounds.some(({ id }) => id === requestedBackground))
+      ? requestedBackground
+      : "none";
+  const backgroundPositions =
+    input.settings?.backgroundPositions &&
+    typeof input.settings.backgroundPositions === "object" &&
+    !Array.isArray(input.settings.backgroundPositions)
+      ? Object.fromEntries(
+          Object.entries(input.settings.backgroundPositions).flatMap(
+            ([id, position]) => {
+              if (
+                !position ||
+                typeof position !== "object" ||
+                typeof position.x !== "number" ||
+                !Number.isFinite(position.x) ||
+                typeof position.y !== "number" ||
+                !Number.isFinite(position.y) ||
+                typeof position.zoom !== "number" ||
+                !Number.isFinite(position.zoom)
+              ) {
+                return [];
+              }
+              return [
+                [
+                  id,
+                  {
+                    x: Math.min(100, Math.max(0, position.x)),
+                    y: Math.min(100, Math.max(0, position.y)),
+                    zoom: Math.min(6, Math.max(1, position.zoom)),
+                  },
+                ],
+              ];
+            },
+          ),
+        )
+      : {};
+
   return {
     version: 2,
     activeSectionId,
@@ -231,6 +310,14 @@ export function normalizeDocument(value: unknown): CarbonDocument {
       ...fallback.settings,
       ...(input.settings ?? {}),
       theme: input.settings?.theme === "dark" ? "dark" : "light",
+      backgroundImage,
+      customBackgrounds,
+      backgroundPositions,
+      backgroundBlur:
+        typeof input.settings?.backgroundBlur === "number" &&
+        Number.isFinite(input.settings.backgroundBlur)
+          ? Math.min(100, Math.max(0, input.settings.backgroundBlur))
+          : fallback.settings.backgroundBlur,
       showLinkPreviews: input.settings?.showLinkPreviews !== false,
       showCreatedAt: input.settings?.showCreatedAt !== false,
       showItemSources: input.settings?.showItemSources !== false,

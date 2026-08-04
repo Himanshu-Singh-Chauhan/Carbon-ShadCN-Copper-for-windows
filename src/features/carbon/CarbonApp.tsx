@@ -1,12 +1,15 @@
 import { SparklesIcon } from "@hugeicons/core-free-icons";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  type CSSProperties,
   useCallback,
   useRef,
   useState,
   type PointerEvent,
 } from "react";
+import { useAssetUrl } from "../../components/AssetImage";
 import { Icon } from "../../components/ui/icon";
+import { getAppBackgroundUrl } from "../../lib/appBackgrounds";
 import {
   ALL_SECTIONS,
   type CarbonAttachment,
@@ -28,6 +31,7 @@ import {
 import { formatShortcut } from "../../lib/utils";
 import { setMarkdownTaskChecked } from "../../lib/markdown";
 import { AppHeader } from "./components/AppHeader";
+import { BackgroundPositionEditor } from "./components/BackgroundPositionEditor";
 import { CarbonOverlays } from "./components/CarbonOverlays";
 import { DropOverlay } from "./components/DropOverlay";
 import { NoteComposer } from "./components/NoteComposer";
@@ -47,6 +51,8 @@ import { useNativeShortcuts } from "./hooks/useNativeShortcuts";
 import { useTheme } from "./hooks/useTheme";
 import { useWindowIntegration } from "./hooks/useWindowIntegration";
 import { useVisibleNotes } from "./hooks/useVisibleNotes";
+
+const DEFAULT_BACKGROUND_POSITION = { x: 50, y: 50, zoom: 1 };
 
 function fileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -84,10 +90,15 @@ export function CarbonApp() {
     clearSelected,
     updateSettings,
   } = useCarbonStore();
+  const selectedCustomBackground = settings.customBackgrounds.find(
+    ({ id }) => id === settings.backgroundImage,
+  );
+  const customBackgroundImageUrl = useAssetUrl(selectedCustomBackground);
 
   const [query, setQuery] = useState("");
   const [commandOpen, setCommandOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [backgroundEditorOpen, setBackgroundEditorOpen] = useState(false);
   const [shortcutRecording, setShortcutRecording] = useState(false);
   const [deleteDoneOpen, setDeleteDoneOpen] = useState(false);
   const [dataPath, setDataPath] = useState("Loading local data…");
@@ -400,7 +411,7 @@ export function CarbonApp() {
     activeSectionId === ALL_SECTIONS ? "all buckets" : activeName;
   if (!hydrated) {
     return (
-      <main className="flex h-full items-center justify-center rounded-2xl border border-line bg-canvas text-muted ring-4 ring-inset ring-line/60">
+      <main className="relative flex h-full items-center justify-center overflow-hidden rounded-2xl border-4 border-window-ring bg-canvas text-muted">
         <div className="flex flex-col items-center gap-3">
           <span className="inline-flex size-11 animate-pulse items-center justify-center rounded-2xl border border-line bg-surface-raised text-accent shadow-sm">
             <Icon icon={SparklesIcon} size={20} />
@@ -411,13 +422,45 @@ export function CarbonApp() {
     );
   }
 
+  const backgroundImageUrl =
+    getAppBackgroundUrl(settings.backgroundImage) ?? customBackgroundImageUrl;
+  const backgroundPosition =
+    settings.backgroundPositions[settings.backgroundImage] ??
+    DEFAULT_BACKGROUND_POSITION;
+
   return (
     <main
-      className="relative flex h-full w-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] ring-4 ring-inset ring-line/60"
+      className="relative flex h-full w-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border-4 border-window-ring bg-canvas shadow-[inset_0_1px_0_rgb(255_255_255/0.08)]"
+      data-app-background={backgroundImageUrl ? "" : undefined}
+      style={
+        backgroundImageUrl
+          ? {
+              "--card-backdrop-blur": `${settings.backgroundBlur}px`,
+            } as CSSProperties
+          : undefined
+      }
       onPointerDown={startWindowDrag}
       onContextMenu={openPasteMenu}
       {...dropHandlers}
     >
+      {backgroundImageUrl && (
+        <div
+          className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+          aria-hidden="true"
+        >
+          <img
+            className="h-full w-full object-cover will-change-transform"
+            src={backgroundImageUrl}
+            alt=""
+            draggable={false}
+            style={{
+              objectPosition: `${backgroundPosition.x}% ${backgroundPosition.y}%`,
+              transform: `scale(${backgroundPosition.zoom})`,
+              transformOrigin: `${backgroundPosition.x}% ${backgroundPosition.y}%`,
+            }}
+          />
+        </div>
+      )}
       <div
         className="absolute inset-x-14 top-0 z-10 h-2"
         data-tauri-drag-region
@@ -636,7 +679,28 @@ export function CarbonApp() {
         onShortcutRecordingChange={setShortcutRecording}
         onThemeChange={(theme) => updateSettings({ theme })}
         onUpdateSettings={updateSettings}
+        onEditBackground={() => {
+          setSettingsOpen(false);
+          setBackgroundEditorOpen(true);
+        }}
       />
+
+      {backgroundEditorOpen && backgroundImageUrl && (
+        <BackgroundPositionEditor
+          imageUrl={backgroundImageUrl}
+          initialPosition={backgroundPosition}
+          onCancel={() => setBackgroundEditorOpen(false)}
+          onSave={(position) => {
+            updateSettings({
+              backgroundPositions: {
+                ...settings.backgroundPositions,
+                [settings.backgroundImage]: position,
+              },
+            });
+            setBackgroundEditorOpen(false);
+          }}
+        />
+      )}
     </main>
   );
 }

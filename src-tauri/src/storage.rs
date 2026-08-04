@@ -365,7 +365,7 @@ fn copy_assets(source_data: &Path, destination_data: &Path) -> Result<(), String
 }
 
 fn referenced_assets(document: &Value) -> HashSet<String> {
-    document
+    let mut referenced: HashSet<String> = document
         .get("sections")
         .and_then(Value::as_array)
         .into_iter()
@@ -377,7 +377,19 @@ fn referenced_assets(document: &Value) -> HashSet<String> {
         .filter_map(|attachment| attachment.get("path").and_then(Value::as_str))
         .filter(|path| validated_asset_path(Path::new("carbon-data.json"), path).is_ok())
         .map(ToOwned::to_owned)
-        .collect()
+        .collect();
+    referenced.extend(
+        document
+            .get("settings")
+            .and_then(|settings| settings.get("customBackgrounds"))
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|background| background.get("path").and_then(Value::as_str))
+            .filter(|path| validated_asset_path(Path::new("carbon-data.json"), path).is_ok())
+            .map(ToOwned::to_owned),
+    );
+    referenced
 }
 
 fn remove_unreferenced_assets(data_path: &Path, document: &Value) -> Result<(), String> {

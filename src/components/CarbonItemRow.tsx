@@ -82,13 +82,13 @@ export function CarbonItemRow({
         transition,
       }}
       className={cn(
-        "group relative flex w-full min-w-0 max-w-full cursor-default items-start gap-3 overflow-hidden rounded-2xl border bg-surface-raised px-3 py-3 shadow-[0_1px_1px_rgb(0_0_0/0.025)] outline-none transition-[border-color,background-color,box-shadow,opacity,transform] duration-150",
+        "group relative flex w-full min-w-0 max-w-full cursor-default items-start gap-3 overflow-hidden rounded-2xl bg-surface-raised px-3 py-3 shadow-[0_1px_1px_rgb(0_0_0/0.025)] outline-none transition-[background-color,box-shadow,outline-color,opacity,transform] duration-150",
         "hover:shadow-panel",
         selected
-          ? "border-accent/55 bg-accent-soft ring-1 ring-accent/20 hover:border-accent/55"
+          ? "bg-accent-soft"
           : focused
-            ? "border-line-strong bg-surface-hover ring-1 ring-line-strong/30 hover:border-line-strong"
-            : "border-line hover:border-line-strong",
+            ? "bg-surface-hover"
+            : undefined,
         item.completed && "opacity-60",
         isDragging && "z-20 scale-[1.015] opacity-90 shadow-float",
       )}
@@ -100,6 +100,8 @@ export function CarbonItemRow({
       }}
       data-item-id={item.id}
       data-note-card
+      data-selected={selected || undefined}
+      data-focused={(!selected && focused) || undefined}
     >
       <button
         type="button"

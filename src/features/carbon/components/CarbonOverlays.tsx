@@ -48,6 +48,7 @@ type CarbonOverlaysProps = {
   onShortcutRecordingChange: (recording: boolean) => void;
   onThemeChange: (theme: Theme) => void;
   onUpdateSettings: (patch: Partial<CarbonSettings>) => void;
+  onEditBackground: () => void;
 };
 
 export function CarbonOverlays({
@@ -86,6 +87,7 @@ export function CarbonOverlays({
   onShortcutRecordingChange,
   onThemeChange,
   onUpdateSettings,
+  onEditBackground,
 }: CarbonOverlaysProps) {
   return (
     <>
@@ -107,6 +109,7 @@ export function CarbonOverlays({
         settings={settings}
         dataPath={dataPath}
         onUpdate={onUpdateSettings}
+        onEditBackground={onEditBackground}
         onShortcutRecordingChange={onShortcutRecordingChange}
         onChooseDataPath={onChooseDataPath}
         onRevealData={onRevealData}

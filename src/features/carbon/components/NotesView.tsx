@@ -144,7 +144,7 @@ export function NotesView({
   return (
     <section
       ref={containerRef}
-      className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-scroll pl-3 pr-[2px] pb-14 pt-1"
+      className="relative z-10 min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-scroll pl-3 pr-[2px] pb-14 pt-1"
       aria-label="Carbon notes"
       data-notes-scroll
     >
