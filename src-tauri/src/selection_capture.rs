@@ -241,8 +241,8 @@ fn capture_scintilla_selection() -> Result<Option<String>, String> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct CapturedContent {
-    text: String,
-    source: Option<app_source::CapturedSource>,
+    pub(crate) text: String,
+    pub(crate) source: Option<app_source::CapturedSource>,
 }
 
 #[cfg(target_os = "windows")]

@@ -1,16 +1,278 @@
-use serde_json::Value;
+use chrono::{SecondsFormat, Utc};
+use serde::Serialize;
+use serde_json::{json, Value};
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs,
     path::{Component, Path},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Mutex,
+    },
     thread,
     time::Duration,
 };
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::{
-    app_source, io_error, link_preview, location_file_path, resolve_data_path, DATA_FILE_NAME,
+    app_source::{self, CapturedSource},
+    io_error, link_preview, location_file_path, resolve_data_path, DATA_FILE_NAME,
 };
+
+static ITEM_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+#[derive(Clone)]
+struct PendingItem {
+    section_id: String,
+    item: Value,
+}
+
+#[derive(Default)]
+struct PendingDocumentChanges {
+    items: HashMap<String, PendingItem>,
+    moves: HashMap<String, String>,
+}
+
+#[derive(Default)]
+pub(crate) struct CarbonStorageState(Mutex<PendingDocumentChanges>);
+pub(crate) const DEFAULT_CAPTURE_HOTKEY: &str = "CommandOrControl+Shift+C";
+pub(crate) const DEFAULT_SHOW_WINDOW_HOTKEY: &str = "CommandOrControl+Shift+Space";
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SavedCapture {
+    pub(crate) item: Value,
+    pub(crate) section_id: String,
+    pub(crate) buckets: Vec<CaptureBucket>,
+}
+
+#[derive(Clone, Serialize)]
+pub(crate) struct CaptureBucket {
+    id: String,
+    name: String,
+}
+
+fn read_document(path: &Path) -> Result<Value, String> {
+    if !path.exists() {
+        return Ok(Value::Null);
+    }
+    let contents = fs::read_to_string(path).map_err(io_error)?;
+    serde_json::from_str(&contents).map_err(io_error)
+}
+
+fn default_document() -> Value {
+    let section_id = next_identifier("section");
+    json!({
+        "version": 2,
+        "activeSectionId": "all",
+        "sections": [{
+            "id": section_id,
+            "name": "Inbox",
+            "sortMode": "manual",
+            "items": []
+        }],
+        "settings": {
+            "theme": "light",
+            "alwaysOnTop": true,
+            "showLinkPreviews": true,
+            "showCreatedAt": true,
+            "showItemSources": true,
+            "doubleClickAction": "copy",
+            "captureHotkey": DEFAULT_CAPTURE_HOTKEY,
+            "showWindowHotkey": DEFAULT_SHOW_WINDOW_HOTKEY
+        }
+    })
+}
+
+pub(crate) fn load_shortcut_settings(
+    app: &AppHandle,
+    state: &CarbonStorageState,
+) -> Result<(String, String), String> {
+    let _guard = state.0.lock().map_err(io_error)?;
+    let path = resolve_data_path(app)?;
+    let mut document = read_document(&path)?;
+    if document.is_null() {
+        document = default_document();
+        write_document(&path, &document)?;
+    }
+    let settings = document.get("settings");
+    let capture = settings
+        .and_then(|settings| settings.get("captureHotkey"))
+        .and_then(Value::as_str)
+        .unwrap_or(DEFAULT_CAPTURE_HOTKEY)
+        .to_string();
+    let show_window = settings
+        .and_then(|settings| settings.get("showWindowHotkey"))
+        .and_then(Value::as_str)
+        .unwrap_or(DEFAULT_SHOW_WINDOW_HOTKEY)
+        .to_string();
+    Ok((capture, show_window))
+}
+
+fn next_identifier(prefix: &str) -> String {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let sequence = ITEM_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("{prefix}-{timestamp:x}-{sequence:x}")
+}
+
+fn sections(document: &Value) -> Option<&Vec<Value>> {
+    document.get("sections")?.as_array()
+}
+
+fn sections_mut(document: &mut Value) -> Option<&mut Vec<Value>> {
+    document.get_mut("sections")?.as_array_mut()
+}
+
+fn item_section_id(document: &Value, item_id: &str) -> Option<String> {
+    sections(document)?.iter().find_map(|section| {
+        section
+            .get("items")
+            .and_then(Value::as_array)?
+            .iter()
+            .any(|item| item.get("id").and_then(Value::as_str) == Some(item_id))
+            .then(|| {
+                section
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            })
+    })
+}
+
+fn append_item(document: &mut Value, section_id: &str, item: Value) -> bool {
+    let Some(target) = sections_mut(document).and_then(|sections| {
+        sections
+            .iter_mut()
+            .find(|section| section.get("id").and_then(Value::as_str) == Some(section_id))
+    }) else {
+        return false;
+    };
+    let Some(items) = target.get_mut("items").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    items.push(item);
+    true
+}
+
+fn move_item(document: &mut Value, item_id: &str, destination_id: &str) -> bool {
+    let Some(all_sections) = sections_mut(document) else {
+        return false;
+    };
+    if !all_sections
+        .iter()
+        .any(|section| section.get("id").and_then(Value::as_str) == Some(destination_id))
+    {
+        return false;
+    }
+
+    let mut moving = None;
+    for section in all_sections.iter_mut() {
+        let Some(items) = section.get_mut("items").and_then(Value::as_array_mut) else {
+            continue;
+        };
+        if let Some(index) = items
+            .iter()
+            .position(|item| item.get("id").and_then(Value::as_str) == Some(item_id))
+        {
+            moving = Some(items.remove(index));
+            break;
+        }
+    }
+    let Some(item) = moving else {
+        return false;
+    };
+    let Some(destination) = all_sections
+        .iter_mut()
+        .find(|section| section.get("id").and_then(Value::as_str) == Some(destination_id))
+    else {
+        return false;
+    };
+    let Some(items) = destination.get_mut("items").and_then(Value::as_array_mut) else {
+        return false;
+    };
+    items.push(item);
+    true
+}
+
+fn merge_pending_changes(
+    document: &mut Value,
+    pending: &mut PendingDocumentChanges,
+    acknowledge_frontend_state: bool,
+) {
+    pending.items.retain(|item_id, pending_item| {
+        if item_section_id(document, item_id).is_some() {
+            !acknowledge_frontend_state
+        } else {
+            let destination = sections(document)
+                .into_iter()
+                .flatten()
+                .find(|section| {
+                    section.get("id").and_then(Value::as_str)
+                        == Some(pending_item.section_id.as_str())
+                })
+                .or_else(|| sections(document).and_then(|sections| sections.first()))
+                .and_then(|section| section.get("id"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned);
+            if let Some(destination) = destination {
+                pending_item.section_id = destination;
+            }
+            let _ = append_item(
+                document,
+                &pending_item.section_id,
+                pending_item.item.clone(),
+            );
+            true
+        }
+    });
+    pending.moves.retain(|item_id, destination_id| {
+        if item_section_id(document, item_id).as_deref() == Some(destination_id) {
+            !acknowledge_frontend_state
+        } else {
+            let _ = move_item(document, item_id, destination_id);
+            true
+        }
+    });
+}
+
+fn target_section(document: &Value) -> Option<String> {
+    let active = document
+        .get("activeSectionId")
+        .and_then(Value::as_str)
+        .filter(|id| *id != "all");
+    let all_sections = sections(document)?;
+    active
+        .filter(|active_id| {
+            all_sections
+                .iter()
+                .any(|section| section.get("id").and_then(Value::as_str) == Some(*active_id))
+        })
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            all_sections
+                .first()
+                .and_then(|section| section.get("id"))
+                .and_then(Value::as_str)
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn capture_buckets(document: &Value) -> Vec<CaptureBucket> {
+    sections(document)
+        .into_iter()
+        .flatten()
+        .filter_map(|section| {
+            Some(CaptureBucket {
+                id: section.get("id")?.as_str()?.to_string(),
+                name: section.get("name")?.as_str()?.to_string(),
+            })
+        })
+        .collect()
+}
 
 fn write_document(path: &Path, document: &Value) -> Result<(), String> {
     let parent = path
@@ -99,20 +361,105 @@ fn remove_unreferenced_assets(data_path: &Path, document: &Value) -> Result<(), 
 }
 
 #[tauri::command]
-pub(crate) fn load_carbon_data(app: AppHandle) -> Result<Value, String> {
+pub(crate) fn load_carbon_data(
+    app: AppHandle,
+    state: State<'_, CarbonStorageState>,
+) -> Result<Value, String> {
+    let _guard = state.0.lock().map_err(io_error)?;
     let path = resolve_data_path(&app)?;
-    if !path.exists() {
-        return Ok(Value::Null);
+    let mut document = read_document(&path)?;
+    if document.is_null() {
+        document = default_document();
+        write_document(&path, &document)?;
     }
-    let contents = fs::read_to_string(path).map_err(io_error)?;
-    serde_json::from_str(&contents).map_err(io_error)
+    Ok(document)
 }
 
 #[tauri::command]
-pub(crate) fn save_carbon_data(app: AppHandle, document: Value) -> Result<(), String> {
+pub(crate) fn save_carbon_data(
+    app: AppHandle,
+    state: State<'_, CarbonStorageState>,
+    mut document: Value,
+) -> Result<(), String> {
+    let mut pending = state.0.lock().map_err(io_error)?;
+    merge_pending_changes(&mut document, &mut pending, true);
     let path = resolve_data_path(&app)?;
     write_document(&path, &document)?;
     remove_unreferenced_assets(&path, &document)
+}
+
+pub(crate) fn append_captured_item(
+    app: &AppHandle,
+    state: &CarbonStorageState,
+    text: String,
+    source: Option<CapturedSource>,
+) -> Result<SavedCapture, String> {
+    let mut pending = state.0.lock().map_err(io_error)?;
+    let path = resolve_data_path(app)?;
+    let mut document = read_document(&path)?;
+    if document.is_null() {
+        document = default_document();
+    }
+    merge_pending_changes(&mut document, &mut pending, false);
+    let section_id = target_section(&document)
+        .ok_or_else(|| "No destination bucket is available.".to_string())?;
+    let timestamp = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let item_id = next_identifier("item");
+    let mut item = json!({
+        "id": item_id,
+        "text": text,
+        "attachments": [],
+        "completed": false,
+        "createdAt": timestamp,
+        "updatedAt": timestamp
+    });
+    if let Some(source) = source {
+        item.as_object_mut()
+            .expect("captured items are JSON objects")
+            .insert("source".to_string(), json!(source));
+    }
+    if !append_item(&mut document, &section_id, item.clone()) {
+        return Err("The destination bucket could not accept the capture.".to_string());
+    }
+    write_document(&path, &document)?;
+    pending.items.insert(
+        item_id,
+        PendingItem {
+            section_id: section_id.clone(),
+            item: item.clone(),
+        },
+    );
+    Ok(SavedCapture {
+        item,
+        section_id,
+        buckets: capture_buckets(&document),
+    })
+}
+
+#[tauri::command]
+pub(crate) fn move_captured_item(
+    app: AppHandle,
+    state: State<'_, CarbonStorageState>,
+    item_id: String,
+    bucket_id: String,
+) -> Result<(), String> {
+    let mut pending = state.0.lock().map_err(io_error)?;
+    let path = resolve_data_path(&app)?;
+    let mut document = read_document(&path)?;
+    merge_pending_changes(&mut document, &mut pending, false);
+    if item_section_id(&document, &item_id).as_deref() != Some(bucket_id.as_str())
+        && !move_item(&mut document, &item_id, &bucket_id)
+    {
+        return Err("The captured note or destination bucket is unavailable.".to_string());
+    }
+    write_document(&path, &document)?;
+    pending.moves.insert(item_id.clone(), bucket_id.clone());
+    let _ = app.emit_to(
+        "main",
+        "native-captured-item-moved",
+        json!({ "itemId": item_id, "bucketId": bucket_id }),
+    );
+    Ok(())
 }
 
 #[tauri::command]
@@ -121,7 +468,13 @@ pub(crate) fn get_data_file_path(app: AppHandle) -> Result<String, String> {
 }
 
 #[tauri::command]
-pub(crate) fn choose_data_file(app: AppHandle, document: Value) -> Result<Option<String>, String> {
+pub(crate) fn choose_data_file(
+    app: AppHandle,
+    state: State<'_, CarbonStorageState>,
+    mut document: Value,
+) -> Result<Option<String>, String> {
+    let mut pending = state.0.lock().map_err(io_error)?;
+    merge_pending_changes(&mut document, &mut pending, true);
     let current = resolve_data_path(&app)?;
     let mut dialog = rfd::FileDialog::new()
         .add_filter("Carbon data", &["json"])
@@ -316,4 +669,76 @@ pub(crate) fn reveal_data_file(app: AppHandle) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn document_with_sections() -> Value {
+        json!({
+            "version": 2,
+            "activeSectionId": "inbox",
+            "sections": [
+                { "id": "inbox", "name": "Inbox", "items": [] },
+                { "id": "archive", "name": "Archive", "items": [] }
+            ],
+            "settings": {}
+        })
+    }
+
+    fn item(id: &str) -> Value {
+        json!({
+            "id": id,
+            "text": "Captured",
+            "attachments": [],
+            "completed": false,
+            "createdAt": "2026-08-04T12:00:00.000Z",
+            "updatedAt": "2026-08-04T12:00:00.000Z"
+        })
+    }
+
+    #[test]
+    fn pending_capture_survives_stale_frontend_save_until_acknowledged() {
+        let captured = item("captured");
+        let mut pending = PendingDocumentChanges::default();
+        pending.items.insert(
+            "captured".to_string(),
+            PendingItem {
+                section_id: "inbox".to_string(),
+                item: captured.clone(),
+            },
+        );
+        let mut stale = document_with_sections();
+
+        merge_pending_changes(&mut stale, &mut pending, true);
+        assert_eq!(
+            item_section_id(&stale, "captured").as_deref(),
+            Some("inbox")
+        );
+        assert!(pending.items.contains_key("captured"));
+
+        merge_pending_changes(&mut stale, &mut pending, true);
+        assert!(!pending.items.contains_key("captured"));
+    }
+
+    #[test]
+    fn pending_bucket_move_is_enforced_until_frontend_reflects_it() {
+        let mut document = document_with_sections();
+        assert!(append_item(&mut document, "inbox", item("captured")));
+        let mut pending = PendingDocumentChanges::default();
+        pending
+            .moves
+            .insert("captured".to_string(), "archive".to_string());
+
+        merge_pending_changes(&mut document, &mut pending, true);
+        assert_eq!(
+            item_section_id(&document, "captured").as_deref(),
+            Some("archive")
+        );
+        assert!(pending.moves.contains_key("captured"));
+
+        merge_pending_changes(&mut document, &mut pending, true);
+        assert!(!pending.moves.contains_key("captured"));
+    }
 }

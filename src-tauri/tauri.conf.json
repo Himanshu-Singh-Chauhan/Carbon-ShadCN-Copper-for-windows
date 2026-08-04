@@ -13,6 +13,9 @@
     "windows": [
       {
         "label": "main",
+        "url": "index.html",
+        "create": false,
+        "visible": false,
         "title": "Carbon",
         "width": 390,
         "height": 720,
@@ -28,6 +31,8 @@
       },
       {
         "label": "capture-toast",
+        "url": "capture-toast.html",
+        "create": false,
         "title": "Carbon notification",
         "width": 360,
         "height": 520,
@@ -42,6 +47,8 @@
       },
       {
         "label": "image-viewer",
+        "url": "image-viewer.html",
+        "create": false,
         "title": "Carbon image",
         "width": 1000,
         "height": 700,

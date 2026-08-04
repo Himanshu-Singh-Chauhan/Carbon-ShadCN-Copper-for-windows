@@ -5,11 +5,11 @@ import {
   Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   copyImageAsset,
+  closeImageViewer,
   takeImageViewerPayload,
   trashImageAsset,
   type ImageViewerPayload,
@@ -124,7 +124,7 @@ export function ImageViewer() {
       setTransform({ scale: 1, x: 0, y: 0 });
       if (attachments.length === 0) {
         setPayload(null);
-        window.setTimeout(() => void getCurrentWindow().hide(), 350);
+        window.setTimeout(() => void closeImageViewer(), 350);
       } else {
         setPayload({
           ...payload,

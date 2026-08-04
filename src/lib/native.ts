@@ -3,7 +3,6 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   CarbonAttachment,
   CarbonDocument,
-  CarbonItemSource,
 } from "./model";
 import { normalizeDocument } from "./model";
 
@@ -42,9 +41,10 @@ export interface LinkPreviewPayload {
   imageMimeType?: string;
 }
 
-export interface CapturedContent {
-  text: string;
-  source?: CarbonItemSource;
+export interface ShortcutConfiguration {
+  captureReady: boolean;
+  captureError?: string;
+  showWindowError?: string;
 }
 
 export function isTauri() {
@@ -72,17 +72,29 @@ export async function getDataPath() {
   return invoke<string>("get_data_file_path");
 }
 
-export async function showMainWindow() {
+export async function destroyMainWindow() {
   if (!isTauri()) return;
-  await invoke("show_main_window");
+  await invoke("destroy_main_window");
 }
 
-export async function configureDoublePressShortcuts(
-  capture: "shift" | "control" | "alt" | null,
-  showWindow: "shift" | "control" | "alt" | null,
-) {
+export async function markMainWindowReady() {
   if (!isTauri()) return;
-  await invoke("configure_double_press_shortcuts", { capture, showWindow });
+  await invoke("main_window_ready");
+}
+
+export async function configureNativeShortcuts(
+  captureHotkey: string,
+  showWindowHotkey: string,
+  enabled: boolean,
+) {
+  if (!isTauri()) {
+    return { captureReady: true } satisfies ShortcutConfiguration;
+  }
+  return invoke<ShortcutConfiguration>("configure_native_shortcuts", {
+    captureHotkey,
+    showWindowHotkey,
+    enabled,
+  });
 }
 
 export async function chooseDataPath(document: CarbonDocument) {
@@ -95,16 +107,9 @@ export async function revealDataFile() {
   await invoke("reveal_data_file");
 }
 
-export async function captureSelectedText() {
-  if (!isTauri()) return { text: "" } satisfies CapturedContent;
-  return invoke<CapturedContent>("capture_selected_text");
-}
-
-export async function showCaptureNotification(
-  payload: CaptureNotificationPayload,
-) {
+export async function moveCapturedItem(itemId: string, bucketId: string) {
   if (!isTauri()) return;
-  await invoke("show_capture_notification", { payload });
+  await invoke("move_captured_item", { itemId, bucketId });
 }
 
 export async function saveImageAsset(
@@ -224,6 +229,11 @@ export async function trashImageAsset(
 export async function showImageViewer(payload: ImageViewerPayload) {
   if (!isTauri()) return;
   await invoke("show_image_viewer", { payload });
+}
+
+export async function closeImageViewer() {
+  if (!isTauri()) return;
+  await invoke("close_image_viewer");
 }
 
 export async function takeImageViewerPayload() {

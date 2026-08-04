@@ -26,6 +26,7 @@ interface CarbonState extends CarbonDocument {
     attachments?: CarbonAttachment[],
     source?: CarbonItemSource,
   ) => AddedItem | undefined;
+  applyNativeItem: (item: CarbonItem, sectionId: string) => void;
   createSection: (name: string) => void;
   renameSection: (sectionId: string, name: string) => void;
   deleteSection: (sectionId: string) => void;
@@ -109,6 +110,24 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
     }));
     return { item, sectionId };
   },
+
+  applyNativeItem: (item, sectionId) =>
+    set((state) => {
+      if (
+        state.sections.some((section) =>
+          section.items.some((candidate) => candidate.id === item.id),
+        )
+      ) {
+        return state;
+      }
+      return {
+        sections: state.sections.map((section) =>
+          section.id === sectionId
+            ? { ...section, items: [...section.items, item] }
+            : section,
+        ),
+      };
+    }),
 
   createSection: (rawName) =>
     set((state) => {

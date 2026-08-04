@@ -1,7 +1,9 @@
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import { CaptureToast } from "./components/CaptureToast";
 import "./styles/globals.css";
 
+document.body.className = "bg-transparent";
+
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <App />,
+  <CaptureToast />,
 );

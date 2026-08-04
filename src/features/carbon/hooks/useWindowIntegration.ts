@@ -2,8 +2,12 @@ import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
-import type { CarbonSettings, WindowBounds } from "../../../lib/model";
-import { isTauri } from "../../../lib/native";
+import type {
+  CarbonItem,
+  CarbonSettings,
+  WindowBounds,
+} from "../../../lib/model";
+import { isTauri, markMainWindowReady } from "../../../lib/native";
 import { useCarbonStore } from "../../../lib/store";
 import type { Notify } from "../types";
 
@@ -111,9 +115,18 @@ export function useWindowIntegration({
       );
     }
 
-    void setupWindow().catch((error) =>
-      notify(`Window preferences were not restored: ${String(error)}`, "error"),
-    );
+    void setupWindow()
+      .catch((error) =>
+        notify(`Window preferences were not restored: ${String(error)}`, "error"),
+      )
+      .finally(() => {
+        void document.fonts.ready
+          .catch(() => undefined)
+          .then(() => {
+            document.getElementById("boot-background")?.remove();
+            return markMainWindowReady();
+          });
+      });
     return () => cleanups.forEach((cleanup) => cleanup());
     // Bounds are intentionally restored only once after hydration.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,18 +134,26 @@ export function useWindowIntegration({
 
   useEffect(() => {
     if (!hydrated || !isTauri()) return;
-    let cleanup: (() => void) | undefined;
-    void listen<{ itemId: string; bucketId: string }>(
-      "captured-item-bucket-changed",
-      ({ payload }) => {
-        useCarbonStore
-          .getState()
-          .moveItems([payload.itemId], payload.bucketId);
-      },
-    ).then((unlisten) => {
-      cleanup = unlisten;
-    });
-    return () => cleanup?.();
+    const cleanups: (() => void)[] = [];
+    void Promise.all([
+      listen<{ item: CarbonItem; sectionId: string }>(
+        "native-captured-item-added",
+        ({ payload }) => {
+          useCarbonStore
+            .getState()
+            .applyNativeItem(payload.item, payload.sectionId);
+        },
+      ),
+      listen<{ itemId: string; bucketId: string }>(
+        "native-captured-item-moved",
+        ({ payload }) => {
+          useCarbonStore
+            .getState()
+            .moveItems([payload.itemId], payload.bucketId);
+        },
+      ),
+    ]).then((listeners) => cleanups.push(...listeners));
+    return () => cleanups.forEach((cleanup) => cleanup());
   }, [hydrated]);
 
   useEffect(() => {

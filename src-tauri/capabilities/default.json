@@ -12,8 +12,6 @@
     "core:window:allow-set-position",
     "core:window:allow-set-size",
     "core:window:allow-start-dragging",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
     "clipboard-manager:allow-write-text",
     "opener:default"
   ]

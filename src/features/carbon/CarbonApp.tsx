@@ -10,9 +10,11 @@ import { Icon } from "../../components/ui/icon";
 import { ALL_SECTIONS, type CarbonAttachment } from "../../lib/model";
 import {
   chooseDataPath,
+  destroyMainWindow,
   isTauri,
   quitApp,
   revealDataFile,
+  saveDocument,
   showImageViewer,
 } from "../../lib/native";
 import {
@@ -26,15 +28,13 @@ import { CarbonOverlays } from "./components/CarbonOverlays";
 import { NoteComposer } from "./components/NoteComposer";
 import { NotesView } from "./components/NotesView";
 import { SelectionToolbar } from "./components/SelectionToolbar";
-import { useCaptureShortcut } from "./hooks/useCaptureShortcut";
 import { useCarbonContextMenus } from "./hooks/useCarbonContextMenus";
 import { useCarbonKeyboard } from "./hooks/useCarbonKeyboard";
 import { useCarbonPersistence } from "./hooks/useCarbonPersistence";
 import { useDraftComposer } from "./hooks/useDraftComposer";
-import { useDoublePressShortcuts } from "./hooks/useDoublePressShortcuts";
 import { useFlexiblePaste } from "./hooks/useFlexiblePaste";
 import { useItemClipboard } from "./hooks/useItemClipboard";
-import { useShowWindowShortcut } from "./hooks/useShowWindowShortcut";
+import { useNativeShortcuts } from "./hooks/useNativeShortcuts";
 import { useTheme } from "./hooks/useTheme";
 import { useWindowIntegration } from "./hooks/useWindowIntegration";
 import { useVisibleNotes } from "./hooks/useVisibleNotes";
@@ -175,24 +175,12 @@ export function CarbonApp() {
   });
   useTheme(settings.theme);
   useWindowIntegration({ hydrated, settings, updateSettings, notify });
-  useCaptureShortcut({
-    enabled: !settingsOpen,
-    hydrated,
-    hotkey: settings.captureHotkey,
-    notify,
-    onReadyChange: setCaptureReady,
-  });
-  useShowWindowShortcut({
-    enabled: !settingsOpen,
-    hotkey: settings.showWindowHotkey,
-    hydrated,
-    notify,
-  });
-  useDoublePressShortcuts({
+  useNativeShortcuts({
     captureHotkey: settings.captureHotkey,
     enabled: !settingsOpen,
     hydrated,
     notify,
+    onReadyChange: setCaptureReady,
     showWindowHotkey: settings.showWindowHotkey,
   });
 
@@ -277,6 +265,24 @@ export function CarbonApp() {
     }
   }
 
+  async function minimizeToTray() {
+    if (
+      draft.trim() ||
+      draftImages.length > 0 ||
+      existingAttachments.length > 0 ||
+      editingItemId
+    ) {
+      notify("Finish or cancel the current draft before minimizing.", "error");
+      return;
+    }
+    try {
+      await saveDocument(getCarbonDocument());
+      await destroyMainWindow();
+    } catch (error) {
+      notify(`Couldn’t minimize Carbon: ${String(error)}`, "error");
+    }
+  }
+
   async function openComposerImage(index: number) {
     try {
       const newAttachments: CarbonAttachment[] = await Promise.all(
@@ -354,6 +360,7 @@ export function CarbonApp() {
         onClearSourceFilter={clearSourceFilter}
         onCopyMarkdown={() => void copyMarkdown()}
         onOpenCommands={() => setCommandOpen(true)}
+        onMinimizeToTray={() => void minimizeToTray()}
         onOpenSettings={() => setSettingsOpen(true)}
         onQueryChange={setQuery}
         onQuit={() => void quitApp()}

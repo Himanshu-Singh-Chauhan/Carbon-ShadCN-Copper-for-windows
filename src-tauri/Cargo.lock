@@ -496,6 +496,7 @@ dependencies = [
 name = "carbon"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "image",
  "reqwest",
  "rfd",

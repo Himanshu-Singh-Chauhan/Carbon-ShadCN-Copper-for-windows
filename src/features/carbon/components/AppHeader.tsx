@@ -5,6 +5,7 @@ import {
   FolderOpenIcon,
   InboxIcon,
   MoreHorizontalIcon,
+  Minimize01Icon,
   PinIcon,
   PinOffIcon,
   Search01Icon,
@@ -51,6 +52,7 @@ export function AppHeader({
   onClearSourceFilter,
   onCopyMarkdown,
   onOpenCommands,
+  onMinimizeToTray,
   onOpenSettings,
   onQueryChange,
   onQuit,
@@ -75,6 +77,7 @@ export function AppHeader({
   onClearSourceFilter: () => void;
   onCopyMarkdown: () => void;
   onOpenCommands: () => void;
+  onMinimizeToTray: () => void;
   onOpenSettings: () => void;
   onQueryChange: (value: string) => void;
   onQuit: () => void;
@@ -111,6 +114,16 @@ export function AppHeader({
             </kbd>
           )}
         </label>
+
+        <button
+          className="inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line bg-surface-raised text-muted shadow-sm outline-none transition-colors hover:border-line-strong hover:bg-surface-hover hover:text-ink focus-visible:ring-2 focus-visible:ring-accent/35"
+          type="button"
+          onClick={onMinimizeToTray}
+          aria-label="Minimize to tray"
+          title="Minimize to tray"
+        >
+          <Icon icon={Minimize01Icon} size={18} />
+        </button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

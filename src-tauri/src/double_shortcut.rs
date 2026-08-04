@@ -6,7 +6,7 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use windows::Win32::{
     Foundation::{LPARAM, LRESULT, WPARAM},
     UI::WindowsAndMessaging::{
@@ -178,9 +178,9 @@ unsafe extern "system" fn keyboard_hook(code: i32, wparam: WPARAM, lparam: LPARA
     unsafe { CallNextHookEx(None, code, wparam, lparam) }
 }
 
-fn parse_modifier(value: Option<String>) -> Result<Option<Modifier>, String> {
+fn parse_modifier(value: Option<&str>) -> Result<Option<Modifier>, String> {
     value
-        .map(|value| match value.as_str() {
+        .map(|value| match value {
             "shift" => Ok(Modifier::Shift),
             "control" => Ok(Modifier::Control),
             "alt" => Ok(Modifier::Alt),
@@ -189,11 +189,7 @@ fn parse_modifier(value: Option<String>) -> Result<Option<Modifier>, String> {
         .transpose()
 }
 
-#[tauri::command]
-pub fn configure_double_press_shortcuts(
-    capture: Option<String>,
-    show_window: Option<String>,
-) -> Result<(), String> {
+pub(crate) fn configure(capture: Option<&str>, show_window: Option<&str>) -> Result<(), String> {
     let mut state = detector().lock().map_err(|error| error.to_string())?;
     state.capture = parse_modifier(capture)?;
     state.show_window = parse_modifier(show_window)?;
@@ -212,15 +208,15 @@ pub fn start(app: AppHandle) {
         state.sender = Some(sender);
     }
 
-    let emitter_app = app.clone();
+    let action_app = app.clone();
     thread::spawn(move || {
         while let Ok(action) = receiver.recv() {
             match action {
                 ShortcutAction::Capture => {
-                    let _ = emitter_app.emit_to("main", "double-shortcut-capture", ());
+                    crate::shortcut_runtime::capture_in_background(action_app.clone());
                 }
                 ShortcutAction::ShowWindow => {
-                    let _ = super::show_main_window(emitter_app.clone());
+                    crate::window_manager::request_show_main_window(&action_app);
                 }
             }
         }

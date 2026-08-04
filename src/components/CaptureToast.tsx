@@ -6,11 +6,12 @@ import {
   InformationCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { invoke } from "@tauri-apps/api/core";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CaptureNotificationPayload } from "../lib/native";
+import { moveCapturedItem } from "../lib/native";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,10 +47,7 @@ function SavedCaptureNotification({
   }, [dismissRevision, menuOpen, toastId]);
 
   async function selectBucket(nextBucketId: string) {
-    await emitTo("main", "captured-item-bucket-changed", {
-      itemId: payload.itemId,
-      bucketId: nextBucketId,
-    });
+    await moveCapturedItem(payload.itemId, nextBucketId);
     setBucketId(nextBucketId);
     setDismissRevision((current) => current + 1);
   }

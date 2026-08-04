@@ -37,6 +37,20 @@ export function useDraftComposer({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const draftImagesRef = useRef<DraftImage[]>([]);
+
+  useEffect(() => {
+    draftImagesRef.current = draftImages;
+  }, [draftImages]);
+
+  useEffect(
+    () => () => {
+      draftImagesRef.current.forEach((image) =>
+        URL.revokeObjectURL(image.previewUrl),
+      );
+    },
+    [],
+  );
 
   useEffect(() => {
     const input = inputRef.current;
@@ -46,7 +60,10 @@ export function useDraftComposer({
   }, [draft]);
 
   function releaseDraftImages() {
-    draftImages.forEach((image) => URL.revokeObjectURL(image.previewUrl));
+    draftImagesRef.current.forEach((image) =>
+      URL.revokeObjectURL(image.previewUrl),
+    );
+    draftImagesRef.current = [];
   }
 
   function resetComposer() {

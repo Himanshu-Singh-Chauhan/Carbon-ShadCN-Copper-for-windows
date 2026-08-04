@@ -1,27 +1,33 @@
 import { useEffect, useState, type ImgHTMLAttributes } from "react";
+import { useNearViewport } from "../hooks/useNearViewport";
 import type { CarbonAttachment } from "../lib/model";
 import { readImageAsset } from "../lib/native";
 
-export function useAssetUrl(attachment: CarbonAttachment | undefined) {
+export function useAssetUrl(
+  attachment: CarbonAttachment | undefined,
+  enabled = true,
+) {
   const [url, setUrl] = useState<string>();
+  const path = attachment?.path;
+  const mimeType = attachment?.mimeType;
 
   useEffect(() => {
-    if (!attachment) {
-      setUrl(undefined);
+    setUrl(undefined);
+    if (!attachment || !enabled) {
       return;
     }
-    if (/^(blob:|data:)/.test(attachment.path)) {
-      setUrl(attachment.path);
+    if (/^(blob:|data:)/.test(path ?? "")) {
+      setUrl(path);
       return;
     }
 
     let disposed = false;
     let objectUrl: string | undefined;
-    readImageAsset(attachment.path)
+    readImageAsset(path ?? "")
       .then((bytes) => {
         if (disposed) return;
         objectUrl = URL.createObjectURL(
-          new Blob([bytes], { type: attachment.mimeType }),
+          new Blob([bytes], { type: mimeType }),
         );
         setUrl(objectUrl);
       })
@@ -33,7 +39,7 @@ export function useAssetUrl(attachment: CarbonAttachment | undefined) {
       disposed = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [attachment]);
+  }, [enabled, mimeType, path]);
 
   return url;
 }
@@ -45,14 +51,26 @@ export function AssetImage({
   ImgHTMLAttributes<HTMLImageElement>,
   "src"
 >) {
-  const url = useAssetUrl(attachment);
+  const { nearViewport, observe } = useNearViewport<HTMLElement>();
+  const url = useAssetUrl(attachment, nearViewport);
   if (!url) {
     return (
       <span
-        className="block h-full w-full animate-pulse bg-surface-hover"
+        ref={observe}
+        className={`block h-full w-full bg-surface-hover ${
+          nearViewport ? "animate-pulse" : ""
+        }`}
         aria-hidden="true"
       />
     );
   }
-  return <img {...props} src={url} />;
+  return (
+    <img
+      {...props}
+      ref={observe}
+      src={url}
+      loading="lazy"
+      decoding="async"
+    />
+  );
 }
