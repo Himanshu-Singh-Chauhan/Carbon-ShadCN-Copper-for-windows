@@ -18,12 +18,17 @@ import {
   type RefObject,
 } from "react";
 import { AssetImage } from "../../../components/AssetImage";
+import { ImageOriginIndicator } from "../../../components/ImageOriginIndicator";
 import { MarkdownContent } from "../../../components/MarkdownContent";
 import { Icon } from "../../../components/ui/icon";
 import type { CarbonAttachment } from "../../../lib/model";
 import { cn } from "../../../lib/utils";
 import type { DraftImage } from "../types";
-import { requestsImageDrop, supportsDrop } from "../drop";
+import {
+  hasStructuredHtmlText,
+  requestsImageDrop,
+  supportsDrop,
+} from "../drop";
 
 export function NoteComposer({
   captureSectionName,
@@ -36,6 +41,7 @@ export function NoteComposer({
   onCancelEditing,
   onDraftChange,
   onDropImages,
+  onDropTextSource,
   onOpenCommands,
   onOpenImage,
   onPaste,
@@ -53,6 +59,7 @@ export function NoteComposer({
   onCancelEditing: () => void;
   onDraftChange: (value: string) => void;
   onDropImages: (data: DataTransfer) => void;
+  onDropTextSource: (data: DataTransfer) => void;
   onOpenCommands: () => void;
   onOpenImage: (index: number) => void;
   onPaste: (data: DataTransfer) => boolean;
@@ -137,7 +144,14 @@ export function NoteComposer({
 
   function handleDrop(event: DragEvent<HTMLElement>) {
     setDropActive(false);
-    if (!requestsImageDrop(event.dataTransfer)) return;
+    const containsFiles = Array.from(event.dataTransfer.types).includes("Files");
+    if (
+      !requestsImageDrop(event.dataTransfer) &&
+      !hasStructuredHtmlText(event.dataTransfer) &&
+      !containsFiles
+    ) {
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     onDropImages(event.dataTransfer);
@@ -208,6 +222,10 @@ export function NoteComposer({
                 >
                   <Icon icon={Cancel01Icon} size={11} />
                 </button>
+                <ImageOriginIndicator
+                  className="bottom-1 left-1"
+                  origin={attachment}
+                />
               </div>
             ))}
             {draftImages.map((image, index) => {
@@ -238,6 +256,10 @@ export function NoteComposer({
                   >
                     <Icon icon={Cancel01Icon} size={11} />
                   </button>
+                  <ImageOriginIndicator
+                    className="bottom-1 left-1"
+                    origin={image}
+                  />
                 </div>
               );
             })}
@@ -279,6 +301,7 @@ export function NoteComposer({
               }
               onChange={(event) => onDraftChange(event.target.value)}
               onKeyDown={handleKeyDown}
+              onDrop={(event) => onDropTextSource(event.dataTransfer)}
               onPaste={handlePaste}
             />
           )}

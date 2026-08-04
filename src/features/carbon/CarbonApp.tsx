@@ -23,6 +23,7 @@ import {
   useCarbonStore,
 } from "../../lib/store";
 import { formatShortcut } from "../../lib/utils";
+import { setMarkdownTaskChecked } from "../../lib/markdown";
 import { AppHeader } from "./components/AppHeader";
 import { CarbonOverlays } from "./components/CarbonOverlays";
 import { DropOverlay } from "./components/DropOverlay";
@@ -34,6 +35,7 @@ import { useCarbonKeyboard } from "./hooks/useCarbonKeyboard";
 import { useCarbonPersistence } from "./hooks/useCarbonPersistence";
 import { useDraftComposer } from "./hooks/useDraftComposer";
 import { useDropToAdd } from "./hooks/useDropToAdd";
+import { useExternalInputSource } from "./hooks/useExternalInputSource";
 import { useFlexiblePaste } from "./hooks/useFlexiblePaste";
 import { useItemClipboard } from "./hooks/useItemClipboard";
 import { useNativeShortcuts } from "./hooks/useNativeShortcuts";
@@ -64,6 +66,7 @@ export function CarbonApp() {
     createSection,
     setActiveSection,
     toggleItem,
+    removeItemSource,
     updateItem,
     deleteItems,
     moveItems,
@@ -151,6 +154,7 @@ export function CarbonApp() {
     inputRef,
     removeDraftImage,
     removeExistingAttachment,
+    rememberDroppedTextSource,
     savingDraft,
     setDraft,
     startEditing,
@@ -183,6 +187,7 @@ export function CarbonApp() {
     onDataPath: setDataPath,
   });
   useTheme(settings.theme);
+  useExternalInputSource(hydrated);
   useWindowIntegration({ hydrated, settings, updateSettings, notify });
   useNativeShortcuts({
     captureHotkey: settings.captureHotkey,
@@ -301,6 +306,8 @@ export function CarbonApp() {
           mimeType: image.file.type,
           width: image.width,
           height: image.height,
+          sourceUrl: image.sourceUrl,
+          pageUrl: image.pageUrl,
         })),
       );
       await showImageViewer({
@@ -426,6 +433,12 @@ export function CarbonApp() {
           }
         }}
         onSortModeChange={setSectionSortMode}
+        onTaskToggle={(item, taskIndex, checked) =>
+          updateItem(
+            item.id,
+            setMarkdownTaskChecked(item.text, taskIndex, checked),
+          )
+        }
         onToggle={toggleItem}
       />
 
@@ -450,6 +463,7 @@ export function CarbonApp() {
         onCancelEditing={cancelEditing}
         onDraftChange={setDraft}
         onDropImages={(data) => void addDroppedImages(data)}
+        onDropTextSource={rememberDroppedTextSource}
         onOpenCommands={() => setCommandOpen(true)}
         onOpenImage={(index) => void openComposerImage(index)}
         onPaste={addPastedImages}
@@ -493,6 +507,11 @@ export function CarbonApp() {
             contextSelectedItems.map((item) => item.id),
             sectionId,
           );
+          setContextMenu(null);
+        }}
+        onContextRemoveSource={() => {
+          if (!contextItem) return;
+          removeItemSource(contextItem.id);
           setContextMenu(null);
         }}
         onContextToggle={() => {

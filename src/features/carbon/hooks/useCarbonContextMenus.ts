@@ -57,15 +57,22 @@ export function useCarbonContextMenus({
   function openContextMenu(event: MouseEvent, itemId: string) {
     event.preventDefault();
     setPasteMenu(null);
-    if (!selectedIds.includes(itemId)) {
+    const sourceTarget =
+      event.target instanceof Element &&
+      Boolean(event.target.closest("[data-item-source]"));
+    if (sourceTarget || !selectedIds.includes(itemId)) {
       clearSelected();
       setFocusedItemId(itemId);
     }
     setContextMenu({
-      x: Math.min(event.clientX, window.innerWidth - 220),
-      y: Math.min(event.clientY, window.innerHeight - 320),
+      x: Math.min(event.clientX, window.innerWidth - (sourceTarget ? 188 : 220)),
+      y: Math.min(event.clientY, window.innerHeight - (sourceTarget ? 56 : 320)),
       itemId,
-      itemIds: selectedIds.includes(itemId) ? [...selectedIds] : [itemId],
+      itemIds:
+        !sourceTarget && selectedIds.includes(itemId)
+          ? [...selectedIds]
+          : [itemId],
+      target: sourceTarget ? "source" : "item",
     });
   }
 

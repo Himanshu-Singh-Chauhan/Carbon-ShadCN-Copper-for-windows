@@ -1,7 +1,10 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { TooltipProvider } from "./components/ui/tooltip";
 import "./styles/globals.css";
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <App />,
+  <TooltipProvider delayDuration={250}>
+    <App />
+  </TooltipProvider>,
 );

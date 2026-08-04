@@ -20,6 +20,7 @@ interface CarbonState extends CarbonDocument {
   addEntry: (
     text: string,
     attachments?: CarbonAttachment[],
+    source?: CarbonItemSource,
   ) => AddedItem | undefined;
   addItem: (
     text: string,
@@ -37,6 +38,7 @@ interface CarbonState extends CarbonDocument {
   deleteSection: (sectionId: string) => void;
   setActiveSection: (sectionId: string) => void;
   toggleItem: (itemId: string) => void;
+  removeItemSource: (itemId: string) => void;
   updateItem: (
     itemId: string,
     text: string,
@@ -87,23 +89,25 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
   hydrate: (document) =>
     set({ ...document, hydrated: true, selectedIds: [] }),
 
-  addEntry: (rawText, attachments = []) => {
+  addEntry: (rawText, attachments = [], source) => {
     const text = rawText.trim();
     if (!text && attachments.length === 0) return;
     if (attachments.length === 0 && /^#\s+/.test(text)) {
       get().createSection(text.replace(/^#\s+/, ""));
       return;
     }
-    return get().addItem(text, undefined, attachments);
+    return get().addItem(text, undefined, attachments, source);
   },
 
   addItem: (text, requestedSectionId, attachments = [], source) => {
+    const normalizedText = text.trim();
+    if (!normalizedText && attachments.length === 0) return undefined;
     const sectionId = targetSectionId(get(), requestedSectionId);
     if (!sectionId) return undefined;
     const now = new Date().toISOString();
     const item: CarbonItem = {
       id: createId("item"),
-      text: text.trim(),
+      text: normalizedText,
       attachments,
       source,
       completed: false,
@@ -208,6 +212,19 @@ export const useCarbonStore = create<CarbonState>((set, get) => ({
           ? {
               ...item,
               completed: !item.completed,
+              updatedAt: new Date().toISOString(),
+            }
+          : item,
+      ),
+    })),
+
+  removeItemSource: (itemId) =>
+    set((state) => ({
+      sections: mapItems(state.sections, (item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              source: undefined,
               updatedAt: new Date().toISOString(),
             }
           : item,

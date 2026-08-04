@@ -112,6 +112,7 @@ export function ItemSourceBadge({ source }: { source: CarbonItemSource }) {
       <div
         className="mt-2 flex min-w-0 max-w-full items-center gap-2 overflow-hidden border-t border-line/70 pt-2"
         title={`Captured from ${source.appName}`}
+        data-item-source
       >
         {content}
       </div>
@@ -124,6 +125,7 @@ export function ItemSourceBadge({ source }: { source: CarbonItemSource }) {
       className="mt-2 flex w-full min-w-0 max-w-full cursor-pointer items-center gap-2 overflow-hidden border-t border-line/70 pt-2 text-left outline-none hover:[&_*]:text-ink focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-accent/35"
       title={`Open ${title}`}
       aria-label={`Open ${title}`}
+      data-item-source
       onClick={(event) => {
         event.stopPropagation();
         void openExternalUrl(source.pageUrl!);

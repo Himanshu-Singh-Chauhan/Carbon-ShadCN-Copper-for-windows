@@ -146,8 +146,12 @@ pub(super) fn app_name(path: &Path) -> String {
     let stem = executable_stem(path);
     browser_name(&stem)
         .map(str::to_string)
-        .or_else(|| version_value(path, "ProductName"))
+        .or_else(|| {
+            stem.eq_ignore_ascii_case("explorer")
+                .then(|| "File Explorer".to_string())
+        })
         .or_else(|| version_value(path, "FileDescription"))
+        .or_else(|| version_value(path, "ProductName"))
         .unwrap_or(stem)
 }
 

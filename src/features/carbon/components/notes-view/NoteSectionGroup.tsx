@@ -28,6 +28,11 @@ type NoteSectionGroupProps = {
   onEdit: (item: CarbonItem) => void;
   onOpenImage: (item: CarbonItem, index: number) => void;
   onSortModeChange: (sectionId: string, sortMode: NoteSortMode) => void;
+  onTaskToggle: (
+    item: CarbonItem,
+    taskIndex: number,
+    checked: boolean,
+  ) => void;
 };
 
 function groupItemsByCreatedAt(section: CarbonSection, now: number) {
@@ -66,6 +71,7 @@ export function NoteSectionGroup({
   onEdit,
   onOpenImage,
   onSortModeChange,
+  onTaskToggle,
 }: NoteSectionGroupProps) {
   const itemGroups = groupItemsByCreatedAt(section, now);
 
@@ -124,6 +130,9 @@ export function NoteSectionGroup({
                   onContextMenu={(event) => onContextMenu(event, item.id)}
                   onEdit={() => onEdit(item)}
                   onOpenImage={(index) => onOpenImage(item, index)}
+                  onTaskToggle={(taskIndex, checked) =>
+                    onTaskToggle(item, taskIndex, checked)
+                  }
                 />
               ))}
             </div>

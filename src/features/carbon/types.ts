@@ -1,3 +1,5 @@
+import type { CarbonImageOrigin } from "../../lib/model";
+
 export type ToastMessage = {
   id: number;
   message: string;
@@ -14,9 +16,10 @@ export type ContextMenuState = {
   y: number;
   itemId: string;
   itemIds: string[];
+  target: "item" | "source";
 } | null;
 
-export type DraftImage = {
+export type DraftImage = CarbonImageOrigin & {
   id: string;
   file: File;
   previewUrl: string;

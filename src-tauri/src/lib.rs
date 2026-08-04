@@ -234,6 +234,7 @@ pub fn run() {
             link_preview::read_link_preview_image,
             link_preview::fetch_dropped_image,
             app_source::read_app_source_icon,
+            app_source::capture_foreground_source,
             trash_image_asset,
             take_capture_notifications,
             capture_notifications_idle,

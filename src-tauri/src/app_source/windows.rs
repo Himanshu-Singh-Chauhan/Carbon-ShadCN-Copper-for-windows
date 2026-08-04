@@ -5,7 +5,10 @@ mod process;
 use tauri::AppHandle;
 use windows::Win32::{
     Foundation::HWND,
-    UI::{Accessibility::IUIAutomation, WindowsAndMessaging::GetForegroundWindow},
+    UI::{
+        Accessibility::IUIAutomation,
+        WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId},
+    },
 };
 
 use super::CapturedSource;
@@ -43,6 +46,14 @@ pub fn capture(
 pub fn foreground_window() -> Option<HWND> {
     let window = unsafe { GetForegroundWindow() };
     (window != HWND::default()).then_some(window)
+}
+
+pub fn is_current_process(window: HWND) -> bool {
+    let mut process_id = 0;
+    unsafe {
+        GetWindowThreadProcessId(window, Some(&mut process_id));
+    }
+    process_id == std::process::id()
 }
 
 pub fn is_code_editor(window: HWND) -> bool {

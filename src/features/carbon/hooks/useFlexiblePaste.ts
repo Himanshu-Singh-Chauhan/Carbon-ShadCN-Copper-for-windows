@@ -1,12 +1,18 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { AddedItem } from "../../../lib/store";
+import type { CarbonImageOrigin } from "../../../lib/model";
 import { useCarbonStore } from "../../../lib/store";
 import { isEditableTarget } from "../../../lib/utils";
 import {
-  imageFilesFromClipboard,
   readSystemClipboard,
   saveImageFile,
 } from "../clipboard";
+import {
+  imageOriginFromTransfer,
+  requestsImageDrop,
+  resolveDroppedContent,
+} from "../drop";
+import { getRememberedSource } from "../externalInputSource";
 import type { Notify } from "../types";
 
 export function useFlexiblePaste({
@@ -23,7 +29,11 @@ export function useFlexiblePaste({
   const pasteInFlight = useRef(false);
 
   const addClipboardItem = useCallback(
-    async (rawText: string, imageFiles: File[]) => {
+    async (
+      rawText: string,
+      imageFiles: File[],
+      imageOrigin: CarbonImageOrigin = {},
+    ) => {
       const text = rawText.trim();
       if ((!text && imageFiles.length === 0) || pasteInFlight.current) {
         return false;
@@ -31,10 +41,16 @@ export function useFlexiblePaste({
 
       pasteInFlight.current = true;
       try {
+        const source = await getRememberedSource(imageOrigin.pageUrl);
         const attachments = await Promise.all(
-          imageFiles.map((file) => saveImageFile(file)),
+          imageFiles.map((file) =>
+            saveImageFile(file, undefined, {
+              ...imageOrigin,
+              pageUrl: imageOrigin.pageUrl ?? source?.pageUrl,
+            }),
+          ),
         );
-        const added = addItem(text, undefined, attachments);
+        const added = addItem(text, undefined, attachments, source);
         if (added) onItemAdded(added);
         return Boolean(added);
       } catch (error) {
@@ -53,20 +69,35 @@ export function useFlexiblePaste({
     function handlePaste(event: ClipboardEvent) {
       if (!event.clipboardData || isEditableTarget(event.target)) return;
       const text = event.clipboardData.getData("text/plain");
-      const images = imageFilesFromClipboard(event.clipboardData);
-      if (!text.trim() && images.length === 0) return;
+      const imageRequested = requestsImageDrop(event.clipboardData);
+      if (!text.trim() && !imageRequested) return;
       event.preventDefault();
-      void addClipboardItem(text, images);
+      const imageOrigin = imageOriginFromTransfer(event.clipboardData);
+      void resolveDroppedContent(event.clipboardData)
+        .then((dropped) =>
+          addClipboardItem(
+            dropped.text,
+            dropped.images.map((image) => image.file),
+            dropped.images[0] ?? imageOrigin,
+          ),
+        )
+        .catch((error) =>
+          notify(`Couldn’t paste this item: ${String(error)}`, "error"),
+        );
     }
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [addClipboardItem, enabled]);
+  }, [addClipboardItem, enabled, notify]);
 
   return useCallback(async () => {
     try {
       const clipboard = await readSystemClipboard();
-      const added = await addClipboardItem(clipboard.text, clipboard.images);
+      const added = await addClipboardItem(
+        clipboard.text,
+        clipboard.images,
+        clipboard.imageOrigin,
+      );
       if (!added && !clipboard.text.trim() && clipboard.images.length === 0) {
         notify("The clipboard has no text or image.", "error");
       }

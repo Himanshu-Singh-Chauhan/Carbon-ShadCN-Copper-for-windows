@@ -35,6 +35,10 @@ export const MARKDOWN_CONTENT_CLASSNAME =
   "[&_h3]:my-1.5 [&_h3]:text-sm [&_h3]:font-semibold [&_h4]:my-1.5 [&_h4]:text-sm [&_h4]:font-semibold " +
   "[&_h5]:my-1 [&_h5]:text-sm [&_h5]:font-semibold [&_h6]:my-1 [&_h6]:text-sm [&_h6]:font-semibold " +
   "[&_ul]:my-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:my-0.5 " +
+  "[&_li[data-item-type=task]]:flex [&_li[data-item-type=task]]:list-none [&_li[data-item-type=task]]:items-start [&_li[data-item-type=task]]:gap-2 " +
+  "[&_li[data-item-type=task]>input]:mt-1 [&_li[data-item-type=task]>input]:size-3.5 [&_li[data-item-type=task]>input]:shrink-0 [&_li[data-item-type=task]>input]:cursor-pointer [&_li[data-item-type=task]>input]:accent-accent [&_li[data-item-type=task]>input]:disabled:cursor-default [&_li[data-item-type=task]>input]:disabled:opacity-100 " +
+  "[&_li[data-item-type=task]>p]:min-w-0 [&_li[data-item-type=task]>p]:flex-1 " +
+  "[&_li[data-item-type=task][data-checked=true]>p]:text-muted [&_li[data-item-type=task][data-checked=true]>p]:line-through " +
   "[&_blockquote]:my-2 [&_blockquote]:border-l-2 [&_blockquote]:border-line-strong [&_blockquote]:pl-3 [&_blockquote]:text-muted " +
   "[&_pre]:my-2 [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:border [&_pre]:border-line [&_pre]:bg-surface [&_pre]:p-2.5 [&_pre]:text-xs " +
   "[&_code]:rounded [&_code]:bg-surface [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs [&_pre_code]:bg-transparent [&_pre_code]:p-0 " +
@@ -102,6 +106,19 @@ function createRenderer() {
             link.setAttribute("draggable", "false");
             link.setAttribute("rel", "noreferrer");
           });
+          rendered
+            .querySelectorAll<HTMLLIElement>('li[data-item-type="task"]')
+            .forEach((item, index) => {
+              const checkbox = document.createElement("input");
+              checkbox.type = "checkbox";
+              checkbox.checked = item.dataset.checked === "true";
+              checkbox.dataset.markdownTaskIndex = String(index);
+              checkbox.setAttribute(
+                "aria-label",
+                checkbox.checked ? "Mark task not done" : "Mark task done",
+              );
+              item.prepend(checkbox);
+            });
           fragment.append(rendered);
           return fragment;
         }),
@@ -138,6 +155,23 @@ export function normalizeMarkdownForRendering(markdown: string) {
     }
   }
   return normalized.replace(/^(\s*)[•·]\s+/gm, "$1- ");
+}
+
+export function setMarkdownTaskChecked(
+  markdown: string,
+  taskIndex: number,
+  checked: boolean,
+) {
+  let currentIndex = -1;
+  return markdown.replace(
+    /^(\s*(?:(?:[-+*])|(?:\d+[.)]))\s+\[)([ xX])(\])/gm,
+    (match, before: string, _state: string, after: string) => {
+      currentIndex += 1;
+      return currentIndex === taskIndex
+        ? `${before}${checked ? "x" : " "}${after}`
+        : match;
+    },
+  );
 }
 
 export function highlightMarkdownMatches(root: HTMLElement, query: string) {

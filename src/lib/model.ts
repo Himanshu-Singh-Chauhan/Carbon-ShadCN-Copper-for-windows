@@ -5,7 +5,12 @@ export type NoteSortMode = "manual" | "created-desc" | "created-asc";
 export type DoubleClickAction = "copy" | "edit";
 export type CapturePlacement = "top" | "bottom";
 
-export interface CarbonAttachment {
+export interface CarbonImageOrigin {
+  sourceUrl?: string;
+  pageUrl?: string;
+}
+
+export interface CarbonAttachment extends CarbonImageOrigin {
   id: string;
   path: string;
   mimeType: string;
@@ -73,6 +78,12 @@ function normalizeTimestamp(value: unknown, fallback: string) {
     : fallback;
 }
 
+function normalizeHttpUrl(value: unknown) {
+  return typeof value === "string" && /^https?:\/\//i.test(value)
+    ? value
+    : undefined;
+}
+
 export function createDefaultDocument(): CarbonDocument {
   const inboxId = createId("section");
   return {
@@ -138,17 +149,23 @@ export function normalizeDocument(value: unknown): CarbonDocument {
                     createdAt,
                     updatedAt: normalizeTimestamp(item.updatedAt, createdAt),
                     attachments: Array.isArray(item.attachments)
-                      ? item.attachments.filter(
-                          (attachment): attachment is CarbonAttachment =>
-                            Boolean(
-                              attachment &&
-                                typeof attachment.id === "string" &&
-                                typeof attachment.path === "string" &&
-                                typeof attachment.mimeType === "string" &&
-                                typeof attachment.width === "number" &&
-                                typeof attachment.height === "number",
-                            ),
-                        )
+                      ? item.attachments
+                          .filter(
+                            (attachment): attachment is CarbonAttachment =>
+                              Boolean(
+                                attachment &&
+                                  typeof attachment.id === "string" &&
+                                  typeof attachment.path === "string" &&
+                                  typeof attachment.mimeType === "string" &&
+                                  typeof attachment.width === "number" &&
+                                  typeof attachment.height === "number",
+                              ),
+                          )
+                          .map((attachment) => ({
+                            ...attachment,
+                            sourceUrl: normalizeHttpUrl(attachment.sourceUrl),
+                            pageUrl: normalizeHttpUrl(attachment.pageUrl),
+                          }))
                       : [],
                     source:
                       item.source &&

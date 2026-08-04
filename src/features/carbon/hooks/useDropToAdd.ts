@@ -1,8 +1,12 @@
-import { useCallback, useState, type DragEvent } from "react";
+import { useCallback, useRef, useState, type DragEvent } from "react";
 import type { AddedItem } from "../../../lib/store";
 import { useCarbonStore } from "../../../lib/store";
 import { isEditableTarget } from "../../../lib/utils";
 import { resolveDroppedContent, supportsDrop } from "../drop";
+import {
+  getRememberedSource,
+  rememberForegroundSource,
+} from "../externalInputSource";
 import { saveImageFile } from "../clipboard";
 import type { Notify } from "../types";
 
@@ -26,10 +30,15 @@ export function useDropToAdd({
   onItemAdded: (added: AddedItem) => void;
 }) {
   const [dropActive, setDropActive] = useState(false);
+  const sourceRequestedForDrag = useRef(false);
 
   const onDragEnter = useCallback(
     (event: DragEvent<HTMLElement>) => {
       if (!enabled || !supportsDrop(event.dataTransfer)) return;
+      if (!sourceRequestedForDrag.current) {
+        sourceRequestedForDrag.current = true;
+        void rememberForegroundSource();
+      }
       if (keepsNativeDropBehavior(event.target)) {
         setDropActive(false);
         return;
@@ -61,11 +70,13 @@ export function useDropToAdd({
     ) {
       return;
     }
+    sourceRequestedForDrag.current = false;
     setDropActive(false);
   }, []);
 
   const onDrop = useCallback(
     (event: DragEvent<HTMLElement>) => {
+      sourceRequestedForDrag.current = false;
       setDropActive(false);
       if (
         !enabled ||
@@ -79,10 +90,32 @@ export function useDropToAdd({
       void (async () => {
         try {
           const dropped = await resolveDroppedContent(event.dataTransfer);
+          if (
+            dropped.unsupportedFiles ||
+            (!dropped.text && dropped.images.length === 0)
+          ) {
+            notify(
+              "That drop doesn’t contain text or a supported image.",
+              "error",
+            );
+            return;
+          }
+          const pageUrl = dropped.images.find((image) => image.pageUrl)?.pageUrl;
+          const source = await getRememberedSource(pageUrl);
           const attachments = await Promise.all(
-            dropped.images.map((file) => saveImageFile(file)),
+            dropped.images.map((image) =>
+              saveImageFile(image.file, undefined, {
+                sourceUrl: image.sourceUrl,
+                pageUrl: image.pageUrl ?? source?.pageUrl,
+              }),
+            ),
           );
-          const added = addItem(dropped.text, undefined, attachments);
+          const added = addItem(
+            dropped.text,
+            undefined,
+            attachments,
+            source,
+          );
           if (added) onItemAdded(added);
         } catch (error) {
           notify(`Couldn’t add the dropped item: ${String(error)}`, "error");

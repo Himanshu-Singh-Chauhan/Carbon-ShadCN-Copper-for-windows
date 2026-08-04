@@ -41,6 +41,11 @@ export type NotesViewProps = {
   onOpenImage: (item: CarbonItem, index: number) => void;
   onSelect: (itemId: string, event: MouseEvent) => void;
   onSortModeChange: (sectionId: string, sortMode: NoteSortMode) => void;
+  onTaskToggle: (
+    item: CarbonItem,
+    taskIndex: number,
+    checked: boolean,
+  ) => void;
   onToggle: (itemId: string) => void;
 };
 
@@ -65,6 +70,7 @@ export function NotesView({
   onOpenImage,
   onSelect,
   onSortModeChange,
+  onTaskToggle,
   onToggle,
 }: NotesViewProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -117,6 +123,7 @@ export function NotesView({
               onEdit={onEdit}
               onOpenImage={onOpenImage}
               onSortModeChange={onSortModeChange}
+              onTaskToggle={onTaskToggle}
             />
           ))}
         </div>

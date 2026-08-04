@@ -7,6 +7,7 @@ import {
   FileEditIcon,
   InboxIcon,
   Menu01Icon,
+  Unlink01Icon,
 } from "@hugeicons/core-free-icons";
 import { useState } from "react";
 import { Icon } from "../../../components/ui/icon";
@@ -27,6 +28,7 @@ export function ItemContextMenu({
   onEdit,
   onMove,
   onDelete,
+  onRemoveSource,
 }: {
   state: NonNullable<ContextMenuState>;
   item: CarbonItem;
@@ -37,8 +39,30 @@ export function ItemContextMenu({
   onEdit: () => void;
   onMove: (sectionId: string) => void;
   onDelete: () => void;
+  onRemoveSource: () => void;
 }) {
   const [showMove, setShowMove] = useState(false);
+
+  if (state.target === "source") {
+    return (
+      <div
+        className="fixed z-[80] min-w-44 rounded-xl border border-line bg-surface-raised p-1.5 shadow-float"
+        style={{ left: state.x, top: state.y }}
+        onPointerDown={(event) => event.stopPropagation()}
+        role="menu"
+      >
+        <button
+          type="button"
+          className={itemStyles}
+          role="menuitem"
+          onClick={onRemoveSource}
+        >
+          <Icon icon={Unlink01Icon} size={15} />
+          Remove source
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div

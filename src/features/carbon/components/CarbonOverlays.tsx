@@ -28,6 +28,7 @@ type CarbonOverlaysProps = {
   onContextDelete: () => void;
   onContextEdit: () => void;
   onContextMove: (sectionId: string) => void;
+  onContextRemoveSource: () => void;
   onContextToggle: () => void;
   onCreateSection: (name: string) => void;
   onOpenCommandChange: (open: boolean) => void;
@@ -57,6 +58,7 @@ export function CarbonOverlays({
   onContextDelete,
   onContextEdit,
   onContextMove,
+  onContextRemoveSource,
   onContextToggle,
   onCreateSection,
   onOpenCommandChange,
@@ -102,6 +104,7 @@ export function CarbonOverlays({
           onEdit={onContextEdit}
           onMove={onContextMove}
           onDelete={onContextDelete}
+          onRemoveSource={onContextRemoveSource}
         />
       )}
 

@@ -284,7 +284,13 @@ fn capture_accessible_selection(app: AppHandle) -> Result<CapturedContent, Strin
         let mut selections = Vec::new();
 
         for index in 0..length {
-            let text = ranges.GetElement(index)?.GetText(-1)?.to_string();
+            let text = ranges
+                .GetElement(index)?
+                .GetText(-1)?
+                .to_string()
+                .replace('\u{fffc}', "\n")
+                .trim()
+                .to_string();
             if !text.is_empty() {
                 selections.push(text);
             }
@@ -453,5 +459,23 @@ pub(crate) fn capture_selected_text(app: AppHandle) -> Result<CapturedContent, S
     {
         let _ = app;
         Err("Selection capture is currently implemented for Windows.".to_string())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_accessible_selection;
+
+    #[test]
+    fn removes_browser_object_replacement_markers() {
+        assert_eq!(
+            sanitize_accessible_selection("Before\u{fffc}After"),
+            "Before\nAfter"
+        );
+        assert_eq!(
+            sanitize_accessible_selection("Before\u{00ef}\u{00bf}\u{00bc}After"),
+            "Before\nAfter"
+        );
+        assert_eq!(sanitize_accessible_selection("\u{fffc}"), "");
     }
 }

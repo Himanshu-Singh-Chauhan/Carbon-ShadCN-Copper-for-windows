@@ -8,6 +8,7 @@ import type { CarbonItem } from "../lib/model";
 import { extractHttpUrls } from "../lib/links";
 import { cn } from "../lib/utils";
 import { AssetImage } from "./AssetImage";
+import { ImageOriginIndicator } from "./ImageOriginIndicator";
 import { ItemSourceBadge } from "./ItemSourceBadge";
 import { LinkPreviewCard } from "./LinkPreviewCard";
 import { MarkdownContent } from "./MarkdownContent";
@@ -24,6 +25,7 @@ interface CarbonItemRowProps {
   showItemSources: boolean;
   showLinkPreviews: boolean;
   onToggle: () => void;
+  onTaskToggle: (taskIndex: number, checked: boolean) => void;
   onSelect: (event: MouseEvent) => void;
   onContextMenu: (event: MouseEvent) => void;
   onEdit: () => void;
@@ -41,6 +43,7 @@ export function CarbonItemRow({
   showItemSources,
   showLinkPreviews,
   onToggle,
+  onTaskToggle,
   onSelect,
   onContextMenu,
   onEdit,
@@ -129,41 +132,49 @@ export function CarbonItemRow({
             )}
           >
             {item.attachments.map((attachment, index) => (
-              <button
-                type="button"
+              <div
                 className={cn(
-                  "min-h-20 min-w-0 max-w-full cursor-grab overflow-hidden bg-surface-hover outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent active:cursor-grabbing",
+                  "group/image relative min-h-20 min-w-0 max-w-full overflow-hidden bg-surface-hover",
                   item.attachments.length === 1 && "max-h-56",
                   item.attachments.length === 3 && index === 0 && "row-span-2",
                 )}
-                draggable
                 key={attachment.id}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  if (event.ctrlKey || event.metaKey) {
-                    onSelect(event);
-                    return;
-                  }
-                  onOpenImage(index);
-                }}
-                onDoubleClick={(event) => event.stopPropagation()}
-                onDragStart={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  void startImageDrag(
-                    attachment.path,
-                    event.currentTarget.querySelector("img"),
-                  ).catch(() => {});
-                }}
-                aria-label={`Open image ${index + 1} of ${item.attachments.length}`}
               >
-                <AssetImage
-                  className="h-full max-h-56 w-full max-w-full object-cover"
-                  attachment={attachment}
-                  alt=""
-                  draggable={false}
+                <button
+                  type="button"
+                  className="h-full min-h-20 w-full cursor-grab overflow-hidden outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent active:cursor-grabbing"
+                  draggable
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (event.ctrlKey || event.metaKey) {
+                      onSelect(event);
+                      return;
+                    }
+                    onOpenImage(index);
+                  }}
+                  onDoubleClick={(event) => event.stopPropagation()}
+                  onDragStart={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void startImageDrag(
+                      attachment.path,
+                      event.currentTarget.querySelector("img"),
+                    ).catch(() => {});
+                  }}
+                  aria-label={`Open image ${index + 1} of ${item.attachments.length}`}
+                >
+                  <AssetImage
+                    className="h-full max-h-56 w-full max-w-full object-cover"
+                    attachment={attachment}
+                    alt=""
+                    draggable={false}
+                  />
+                </button>
+                <ImageOriginIndicator
+                  className="bottom-1.5 left-1.5"
+                  origin={attachment}
                 />
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -172,6 +183,7 @@ export function CarbonItemRow({
             markdown={item.text}
             query={searchQuery}
             completed={item.completed}
+            onTaskToggle={onTaskToggle}
           />
         )}
         {previewUrl && <LinkPreviewCard url={previewUrl} />}

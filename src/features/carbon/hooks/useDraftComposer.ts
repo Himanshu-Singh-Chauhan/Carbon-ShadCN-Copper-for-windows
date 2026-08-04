@@ -2,14 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import type {
   CarbonAttachment,
   CarbonItem,
+  CarbonItemSource,
 } from "../../../lib/model";
 import { type AddedItem, useCarbonStore } from "../../../lib/store";
 import {
   createDraftImage,
-  imageFilesFromClipboard,
   saveImageFile,
 } from "../clipboard";
-import { resolveDroppedContent } from "../drop";
+import {
+  hasStructuredHtmlText,
+  imageOriginFromTransfer,
+  requestsImageDrop,
+  resolveDroppedContent,
+} from "../drop";
+import { getRememberedSource } from "../externalInputSource";
 import type { DraftImage, Notify } from "../types";
 
 export function useDraftComposer({
@@ -34,6 +40,10 @@ export function useDraftComposer({
   const [savingDraft, setSavingDraft] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const draftImagesRef = useRef<DraftImage[]>([]);
+  const draftSourceRef = useRef<CarbonItemSource | undefined>(undefined);
+  const draftSourceRequestRef = useRef<
+    Promise<CarbonItemSource | undefined> | undefined
+  >(undefined);
 
   useEffect(() => {
     draftImagesRef.current = draftImages;
@@ -68,6 +78,8 @@ export function useDraftComposer({
     setDraftImages([]);
     setExistingAttachments([]);
     setEditingItemId(null);
+    draftSourceRef.current = undefined;
+    draftSourceRequestRef.current = undefined;
   }
 
   function startEditing(item: CarbonItem) {
@@ -76,18 +88,70 @@ export function useDraftComposer({
     setDraftImages([]);
     setExistingAttachments(item.attachments);
     setEditingItemId(item.id);
+    draftSourceRef.current = item.source;
     requestAnimationFrame(() => {
       inputRef.current?.focus();
       inputRef.current?.setSelectionRange(item.text.length, item.text.length);
     });
   }
 
+  function insertDraftText(
+    text: string,
+    selection?: { end: number; start: number },
+  ) {
+    const incoming = text.trim();
+    if (!incoming) return;
+    setDraft((current) => {
+      if (selection) {
+        const start = Math.min(selection.start, current.length);
+        const end = Math.min(selection.end, current.length);
+        const next = `${current.slice(0, start)}${incoming}${current.slice(end)}`;
+        requestAnimationFrame(() => {
+          const input = inputRef.current;
+          if (!input) return;
+          const cursor = start + incoming.length;
+          input.focus();
+          input.setSelectionRange(cursor, cursor);
+        });
+        return next;
+      }
+      if (!current) return incoming;
+      return `${current}${current.endsWith("\n") ? "" : "\n"}${incoming}`;
+    });
+  }
+
   function addPastedImages(data: DataTransfer) {
-    const files = imageFilesFromClipboard(data);
-    if (files.length === 0) return false;
-    void Promise.all(files.map(createDraftImage))
-      .then((images) => {
+    if (!requestsImageDrop(data) && !hasStructuredHtmlText(data)) return false;
+    const input = inputRef.current;
+    const selection = input
+      ? { start: input.selectionStart, end: input.selectionEnd }
+      : undefined;
+    const imageOrigin = imageOriginFromTransfer(data);
+    const sourceRequest = getRememberedSource(imageOrigin.pageUrl).then(
+      (source) => {
+        if (source && !draftSourceRef.current) draftSourceRef.current = source;
+        return source;
+      },
+    );
+    draftSourceRequestRef.current = sourceRequest;
+    void Promise.all([sourceRequest, resolveDroppedContent(data)])
+      .then(async ([source, dropped]) => ({
+        images: await Promise.all(
+          dropped.images.map((image) =>
+            createDraftImage(image.file, {
+              sourceUrl: image.sourceUrl ?? imageOrigin.sourceUrl,
+              pageUrl:
+                image.pageUrl ??
+                imageOrigin.pageUrl ??
+                source?.pageUrl,
+            }),
+          ),
+        ),
+        text: dropped.text,
+      }))
+      .then(({ images, text }) => {
         setDraftImages((current) => [...current, ...images]);
+        insertDraftText(text, selection);
         requestAnimationFrame(() => inputRef.current?.focus());
       })
       .catch(() => notify("Carbon couldn’t read that image.", "error"));
@@ -97,13 +161,45 @@ export function useDraftComposer({
   async function addDroppedImages(data: DataTransfer) {
     try {
       const dropped = await resolveDroppedContent(data);
-      if (!dropped.imageRequested || dropped.images.length === 0) return;
-      const images = await Promise.all(dropped.images.map(createDraftImage));
+      if (
+        dropped.unsupportedFiles ||
+        (!dropped.text && dropped.images.length === 0)
+      ) {
+        notify(
+          "That drop doesn’t contain supported text or an image.",
+          "error",
+        );
+        return;
+      }
+      const pageUrl = dropped.images.find((image) => image.pageUrl)?.pageUrl;
+      const sourceRequest = getRememberedSource(pageUrl);
+      draftSourceRequestRef.current = sourceRequest;
+      const source = await sourceRequest;
+      if (source && !draftSourceRef.current) draftSourceRef.current = source;
+      const images = await Promise.all(
+        dropped.images.map((image) =>
+          createDraftImage(image.file, {
+            sourceUrl: image.sourceUrl,
+            pageUrl: image.pageUrl ?? source?.pageUrl,
+          }),
+        ),
+      );
       setDraftImages((current) => [...current, ...images]);
+      insertDraftText(dropped.text);
       requestAnimationFrame(() => inputRef.current?.focus());
     } catch {
       notify("Carbon couldn’t read that image.", "error");
     }
+  }
+
+  function rememberDroppedTextSource(data: DataTransfer) {
+    const request = getRememberedSource(
+      imageOriginFromTransfer(data).pageUrl,
+    ).then((source) => {
+      if (source && !draftSourceRef.current) draftSourceRef.current = source;
+      return source;
+    });
+    draftSourceRequestRef.current = request;
   }
 
   function removeDraftImage(id: string) {
@@ -136,8 +232,16 @@ export function useDraftComposer({
     }
     setSavingDraft(true);
     try {
+      if (draftSourceRequestRef.current) {
+        await draftSourceRequestRef.current;
+      }
       const savedDraftImages: CarbonAttachment[] = await Promise.all(
-        draftImages.map((image) => saveImageFile(image.file, image.id)),
+        draftImages.map((image) =>
+          saveImageFile(image.file, image.id, {
+            sourceUrl: image.sourceUrl,
+            pageUrl: image.pageUrl,
+          }),
+        ),
       );
       const attachments = [...existingAttachments, ...savedDraftImages];
 
@@ -150,7 +254,7 @@ export function useDraftComposer({
           notify("Changes saved");
         }
       } else {
-        const added = addEntry(text, attachments);
+        const added = addEntry(text, attachments, draftSourceRef.current);
         if (attachments.length === 0 && /^#\s+/.test(text)) {
           notify("Bucket created");
         } else if (added) {
@@ -176,6 +280,7 @@ export function useDraftComposer({
     inputRef,
     removeDraftImage,
     removeExistingAttachment,
+    rememberDroppedTextSource,
     savingDraft,
     setDraft,
     startEditing,

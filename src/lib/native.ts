@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   CarbonAttachment,
   CarbonDocument,
+  CarbonItemSource,
 } from "./model";
 import { normalizeDocument } from "./model";
 
@@ -179,6 +180,14 @@ export async function readAppSourceIcon(path: string) {
   if (!isTauri()) return new Uint8Array();
   const value = await invoke<ArrayBuffer>("read_app_source_icon", { path });
   return new Uint8Array(value);
+}
+
+export async function captureForegroundSource() {
+  if (!isTauri()) return undefined;
+  return (
+    (await invoke<CarbonItemSource | null>("capture_foreground_source")) ??
+    undefined
+  );
 }
 
 export async function openExternalUrl(url: string) {

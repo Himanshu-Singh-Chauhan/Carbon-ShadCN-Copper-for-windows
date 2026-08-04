@@ -2,7 +2,10 @@ import {
   readImage,
   readText,
 } from "@tauri-apps/plugin-clipboard-manager";
-import type { CarbonAttachment } from "../../lib/model";
+import type {
+  CarbonAttachment,
+  CarbonImageOrigin,
+} from "../../lib/model";
 import { isTauri, saveImageAsset } from "../../lib/native";
 import { createId } from "../../lib/utils";
 import type { DraftImage } from "./types";
@@ -20,11 +23,15 @@ async function imageDimensions(file: File) {
   return dimensions;
 }
 
-export async function createDraftImage(file: File): Promise<DraftImage> {
+export async function createDraftImage(
+  file: File,
+  origin: CarbonImageOrigin = {},
+): Promise<DraftImage> {
   return {
     id: createId("attachment"),
     file,
     previewUrl: URL.createObjectURL(file),
+    ...origin,
     ...(await imageDimensions(file)),
   };
 }
@@ -32,6 +39,7 @@ export async function createDraftImage(file: File): Promise<DraftImage> {
 export async function saveImageFile(
   file: File,
   id = createId("attachment"),
+  origin: CarbonImageOrigin = {},
 ): Promise<CarbonAttachment> {
   const dimensions = await imageDimensions(file);
   return {
@@ -42,6 +50,7 @@ export async function saveImageFile(
       new Uint8Array(await file.arrayBuffer()),
     ),
     mimeType: file.type,
+    ...origin,
     ...dimensions,
   };
 }
@@ -73,16 +82,29 @@ async function nativeClipboardImage() {
   }
 }
 
+function imageOriginFromClipboardText(text: string): CarbonImageOrigin {
+  const value = text.trim();
+  if (!/^https?:\/\//i.test(value)) return {};
+  return /\.(?:bmp|gif|jpe?g|png|webp)(?:$|[?#])/i.test(value)
+    ? { sourceUrl: value }
+    : { pageUrl: value };
+}
+
 export async function readSystemClipboard() {
   if (isTauri()) {
     const [textResult, imageResult] = await Promise.allSettled([
       readText(),
       nativeClipboardImage(),
     ]);
+    const text = textResult.status === "fulfilled" ? textResult.value : "";
+    const images =
+      imageResult.status === "fulfilled" ? [imageResult.value] : [];
     return {
-      text: textResult.status === "fulfilled" ? textResult.value : "",
-      images:
-        imageResult.status === "fulfilled" ? [imageResult.value] : [],
+      text,
+      images,
+      imageOrigin: images.length
+        ? imageOriginFromClipboardText(text)
+        : {},
     };
   }
 
@@ -99,5 +121,9 @@ export async function readSystemClipboard() {
     }
   }
   const text = await navigator.clipboard.readText().catch(() => "");
-  return { text, images };
+  return {
+    text,
+    images,
+    imageOrigin: images.length ? imageOriginFromClipboardText(text) : {},
+  };
 }
