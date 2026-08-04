@@ -1,4 +1,5 @@
 mod app_source;
+mod capture_notifications;
 mod double_shortcut;
 mod link_preview;
 mod selection_capture;
@@ -7,27 +8,27 @@ mod storage;
 mod window_manager;
 
 use serde_json::Value;
-use std::{collections::VecDeque, fs, path::PathBuf, sync::Mutex};
+use std::{fs, path::PathBuf, sync::Mutex};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, State,
+    AppHandle, Emitter, Manager, State,
 };
 
+use capture_notifications::{
+    capture_notifications_idle, take_capture_notifications, PendingCaptureNotifications,
+};
 use storage::{
     choose_data_file, copy_image_asset, copy_items_to_clipboard_history, get_data_file_path,
     load_carbon_data, load_shortcut_settings, move_captured_item, read_image_asset,
-    reveal_data_file, save_carbon_data, save_image_asset, trash_image_asset, CarbonStorageState,
-    DEFAULT_CAPTURE_HOTKEY, DEFAULT_SHOW_WINDOW_HOTKEY,
+    resolve_image_asset_path, reveal_data_file, save_carbon_data, save_image_asset,
+    trash_image_asset, CarbonStorageState, DEFAULT_CAPTURE_HOTKEY, DEFAULT_SHOW_WINDOW_HOTKEY,
 };
 
 pub(crate) const DATA_FILE_NAME: &str = "carbon-data.json";
 const LOCATION_FILE_NAME: &str = "data-location.txt";
 #[cfg(debug_assertions)]
 const DEVELOPMENT_DIRECTORY_NAME: &str = "development";
-
-#[derive(Default)]
-pub(crate) struct PendingCaptureNotifications(Mutex<VecDeque<Value>>);
 
 #[derive(Default)]
 struct PendingImageViewer(Mutex<Option<Value>>);
@@ -79,54 +80,13 @@ async fn show_main_window(app: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn destroy_main_window(app: AppHandle) -> Result<(), String> {
-    window_manager::destroy_main_window(&app)
+fn minimize_main_window(app: AppHandle) -> Result<(), String> {
+    window_manager::minimize_main_window(&app)
 }
 
 #[tauri::command]
 fn main_window_ready(app: AppHandle) -> Result<(), String> {
     window_manager::main_window_ready(&app)
-}
-
-pub(crate) fn display_capture_notification(
-    app: &AppHandle,
-    pending: &PendingCaptureNotifications,
-    payload: Value,
-) -> Result<(), String> {
-    pending.0.lock().map_err(io_error)?.push_back(payload);
-    let window = app
-        .get_webview_window("capture-toast")
-        .ok_or_else(|| "The capture notification window is unavailable.".to_string())?;
-    let cursor = app.cursor_position().map_err(io_error)?;
-    let monitor = app
-        .monitor_from_point(cursor.x, cursor.y)
-        .map_err(io_error)?
-        .or(app.primary_monitor().map_err(io_error)?)
-        .ok_or_else(|| "No active monitor was found.".to_string())?;
-    let work_area = monitor.work_area();
-    window
-        .set_size(LogicalSize::new(360.0, 520.0))
-        .map_err(io_error)?;
-    let window_size = window.outer_size().map_err(io_error)?;
-    let x = work_area.position.x
-        + ((work_area.size.width as i64 - window_size.width as i64) / 2) as i32;
-    let y = work_area.position.y + work_area.size.height as i32 - window_size.height as i32 - 28;
-
-    window
-        .set_position(PhysicalPosition::new(x, y))
-        .map_err(io_error)?;
-    let _ = window.set_ignore_cursor_events(false);
-    let _ = window.set_focusable(false);
-    window.show().map_err(io_error)?;
-    app.emit_to("capture-toast", "capture-notification-ready", ())
-        .map_err(io_error)
-}
-
-#[tauri::command]
-fn take_capture_notifications(
-    pending: State<'_, PendingCaptureNotifications>,
-) -> Result<Vec<Value>, String> {
-    Ok(pending.0.lock().map_err(io_error)?.drain(..).collect())
 }
 
 #[tauri::command]
@@ -243,6 +203,7 @@ pub fn run() {
         .manage(shortcut_runtime::ShortcutRuntimeState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_drag::init())
         .plugin(tauri_plugin_global_shortcut::Builder::default().build())
         .setup(configure_tray)
         .on_window_event(|window, event| {
@@ -258,21 +219,24 @@ pub fn run() {
             save_carbon_data,
             get_data_file_path,
             show_main_window,
-            destroy_main_window,
+            minimize_main_window,
             main_window_ready,
             shortcut_runtime::configure_native_shortcuts,
             choose_data_file,
             reveal_data_file,
             save_image_asset,
             read_image_asset,
+            resolve_image_asset_path,
             copy_image_asset,
             copy_items_to_clipboard_history,
             move_captured_item,
             link_preview::get_link_preview,
             link_preview::read_link_preview_image,
+            link_preview::fetch_dropped_image,
             app_source::read_app_source_icon,
             trash_image_asset,
             take_capture_notifications,
+            capture_notifications_idle,
             show_image_viewer,
             close_image_viewer,
             take_image_viewer_payload,

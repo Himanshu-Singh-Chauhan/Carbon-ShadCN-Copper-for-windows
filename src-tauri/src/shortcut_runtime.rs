@@ -8,10 +8,10 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 
 use crate::{
+    capture_notifications::PendingCaptureNotifications,
     double_shortcut,
     selection_capture::capture_selected_text,
     storage::{append_captured_item, CarbonStorageState},
-    PendingCaptureNotifications,
 };
 
 static CAPTURE_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
@@ -158,8 +158,11 @@ fn status_payload(message: &str, tone: &str) -> Value {
 
 fn show_status(app: &AppHandle, message: &str, tone: &str) {
     let pending = app.state::<PendingCaptureNotifications>();
-    let _ =
-        crate::display_capture_notification(app, pending.inner(), status_payload(message, tone));
+    let _ = crate::capture_notifications::display_capture_notification(
+        app,
+        pending.inner(),
+        status_payload(message, tone),
+    );
 }
 
 pub(crate) fn capture_in_background(app: AppHandle) {
@@ -197,7 +200,7 @@ pub(crate) fn capture_in_background(app: AppHandle) {
                                 }),
                             );
                             let pending = app.state::<PendingCaptureNotifications>();
-                            let _ = crate::display_capture_notification(
+                            let _ = crate::capture_notifications::display_capture_notification(
                                 &app,
                                 pending.inner(),
                                 json!({

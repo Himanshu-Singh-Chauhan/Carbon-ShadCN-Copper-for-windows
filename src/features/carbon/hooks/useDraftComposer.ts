@@ -14,6 +14,7 @@ import {
   imageFilesFromClipboard,
   saveImageFile,
 } from "../clipboard";
+import { resolveDroppedContent } from "../drop";
 import type { DraftImage, Notify } from "../types";
 
 export function useDraftComposer({
@@ -99,6 +100,18 @@ export function useDraftComposer({
     }
   }
 
+  async function addDroppedImages(data: DataTransfer) {
+    try {
+      const dropped = await resolveDroppedContent(data);
+      if (!dropped.imageRequested || dropped.images.length === 0) return;
+      const images = await Promise.all(dropped.images.map(createDraftImage));
+      setDraftImages((current) => [...current, ...images]);
+      requestAnimationFrame(() => inputRef.current?.focus());
+    } catch {
+      notify("Carbon couldn’t read that image.", "error");
+    }
+  }
+
   function removeDraftImage(id: string) {
     setDraftImages((current) => {
       const removing = current.find((image) => image.id === id);
@@ -159,6 +172,7 @@ export function useDraftComposer({
   }
 
   return {
+    addDroppedImages,
     addPastedImages,
     cancelEditing: resetComposer,
     draft,

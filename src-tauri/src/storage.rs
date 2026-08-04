@@ -549,6 +549,14 @@ pub(crate) fn read_image_asset(
 }
 
 #[tauri::command]
+pub(crate) fn resolve_image_asset_path(app: AppHandle, path: String) -> Result<String, String> {
+    validated_asset_path(&resolve_data_path(&app)?, &path)?
+        .canonicalize()
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(io_error)
+}
+
+#[tauri::command]
 pub(crate) async fn copy_image_asset(app: AppHandle, path: String) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         use tauri_plugin_clipboard_manager::ClipboardExt;

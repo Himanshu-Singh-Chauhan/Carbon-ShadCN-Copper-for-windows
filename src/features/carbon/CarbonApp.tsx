@@ -10,8 +10,8 @@ import { Icon } from "../../components/ui/icon";
 import { ALL_SECTIONS, type CarbonAttachment } from "../../lib/model";
 import {
   chooseDataPath,
-  destroyMainWindow,
   isTauri,
+  minimizeMainWindow,
   quitApp,
   revealDataFile,
   saveDocument,
@@ -25,6 +25,7 @@ import {
 import { formatShortcut } from "../../lib/utils";
 import { AppHeader } from "./components/AppHeader";
 import { CarbonOverlays } from "./components/CarbonOverlays";
+import { DropOverlay } from "./components/DropOverlay";
 import { NoteComposer } from "./components/NoteComposer";
 import { NotesView } from "./components/NotesView";
 import { SelectionToolbar } from "./components/SelectionToolbar";
@@ -32,6 +33,7 @@ import { useCarbonContextMenus } from "./hooks/useCarbonContextMenus";
 import { useCarbonKeyboard } from "./hooks/useCarbonKeyboard";
 import { useCarbonPersistence } from "./hooks/useCarbonPersistence";
 import { useDraftComposer } from "./hooks/useDraftComposer";
+import { useDropToAdd } from "./hooks/useDropToAdd";
 import { useFlexiblePaste } from "./hooks/useFlexiblePaste";
 import { useItemClipboard } from "./hooks/useItemClipboard";
 import { useNativeShortcuts } from "./hooks/useNativeShortcuts";
@@ -139,6 +141,7 @@ export function CarbonApp() {
   );
 
   const {
+    addDroppedImages,
     addPastedImages,
     cancelEditing,
     draft,
@@ -161,6 +164,12 @@ export function CarbonApp() {
   });
 
   const pasteFromClipboard = useFlexiblePaste({
+    addItem,
+    enabled: hydrated && !commandOpen && !settingsOpen,
+    notify,
+    onItemAdded: revealPastedItem,
+  });
+  const { dropActive, dropHandlers } = useDropToAdd({
     addItem,
     enabled: hydrated && !commandOpen && !settingsOpen,
     notify,
@@ -277,7 +286,7 @@ export function CarbonApp() {
     }
     try {
       await saveDocument(getCarbonDocument());
-      await destroyMainWindow();
+      await minimizeMainWindow();
     } catch (error) {
       notify(`Couldn’t minimize Carbon: ${String(error)}`, "error");
     }
@@ -333,6 +342,7 @@ export function CarbonApp() {
       className="relative flex h-full w-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden rounded-2xl border border-line bg-canvas shadow-[inset_0_1px_0_rgb(255_255_255/0.08)] ring-4 ring-inset ring-line/60"
       onPointerDown={startWindowDrag}
       onContextMenu={openPasteMenu}
+      {...dropHandlers}
     >
       <div
         className="absolute inset-x-14 top-0 z-10 h-2"
@@ -439,6 +449,7 @@ export function CarbonApp() {
         saving={savingDraft}
         onCancelEditing={cancelEditing}
         onDraftChange={setDraft}
+        onDropImages={(data) => void addDroppedImages(data)}
         onOpenCommands={() => setCommandOpen(true)}
         onOpenImage={(index) => void openComposerImage(index)}
         onPaste={(event) => void addPastedImages(event)}
@@ -446,6 +457,8 @@ export function CarbonApp() {
         onRemoveExistingImage={removeExistingAttachment}
         onSubmit={() => void submitDraft()}
       />
+
+      {dropActive && <DropOverlay />}
 
       <CarbonOverlays
         activeSectionId={activeSectionId}

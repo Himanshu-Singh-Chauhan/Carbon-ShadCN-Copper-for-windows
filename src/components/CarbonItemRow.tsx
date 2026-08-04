@@ -1,8 +1,9 @@
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { CheckmarkCircle02Icon, Drag01Icon } from "@hugeicons/core-free-icons";
-import type { MouseEvent } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import { formatAddedAt, formatExactAddedAt } from "../lib/dates";
+import { prepareTextDrag, startImageDrag } from "../lib/dragOut";
 import type { CarbonItem } from "../lib/model";
 import { extractHttpUrls, splitTextByLinks } from "../lib/links";
 import { openExternalUrl } from "../lib/native";
@@ -117,6 +118,19 @@ export function CarbonItemRow({
     ? extractHttpUrls(item.text)[0]
     : undefined;
 
+  function handleItemDragStart(event: DragEvent<HTMLElement>) {
+    const target = event.target;
+    if (
+      !item.text.trim() ||
+      (target instanceof Element &&
+        target.closest("button, a, [data-no-item-drag]"))
+    ) {
+      event.preventDefault();
+      return;
+    }
+    prepareTextDrag(event, item.text);
+  }
+
   return (
     <article
       ref={setNodeRef}
@@ -160,7 +174,11 @@ export function CarbonItemRow({
           <Icon icon={CheckmarkCircle02Icon} size={14} strokeWidth={2.6} />
         )}
       </button>
-      <div className="min-w-0 max-w-full flex-1 overflow-hidden">
+      <div
+        className="min-w-0 max-w-full flex-1 overflow-hidden"
+        draggable={Boolean(item.text.trim())}
+        onDragStart={handleItemDragStart}
+      >
         {item.attachments.length > 0 && (
           <div
             className={cn(
@@ -174,10 +192,11 @@ export function CarbonItemRow({
               <button
                 type="button"
                 className={cn(
-                  "min-h-20 min-w-0 max-w-full cursor-zoom-in overflow-hidden bg-surface-hover outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                  "min-h-20 min-w-0 max-w-full cursor-grab overflow-hidden bg-surface-hover outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent active:cursor-grabbing",
                   item.attachments.length === 1 && "max-h-56",
                   item.attachments.length === 3 && index === 0 && "row-span-2",
                 )}
+                draggable
                 key={attachment.id}
                 onClick={(event) => {
                   event.stopPropagation();
@@ -188,6 +207,14 @@ export function CarbonItemRow({
                   onOpenImage(index);
                 }}
                 onDoubleClick={(event) => event.stopPropagation()}
+                onDragStart={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void startImageDrag(
+                    attachment.path,
+                    event.currentTarget.querySelector("img"),
+                  ).catch(() => {});
+                }}
                 aria-label={`Open image ${index + 1} of ${item.attachments.length}`}
               >
                 <AssetImage
@@ -229,6 +256,8 @@ export function CarbonItemRow({
           type="button"
           className="mt-0.5 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-lg text-faint opacity-0 outline-none transition-[opacity,color,background-color] hover:bg-surface-hover hover:text-muted focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-accent/35 active:cursor-grabbing group-hover:opacity-100"
           aria-label="Drag to reorder"
+          data-no-item-drag
+          draggable={false}
           onClick={(event) => event.stopPropagation()}
           {...attributes}
           {...listeners}

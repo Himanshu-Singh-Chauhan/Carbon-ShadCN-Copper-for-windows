@@ -72,9 +72,9 @@ export async function getDataPath() {
   return invoke<string>("get_data_file_path");
 }
 
-export async function destroyMainWindow() {
+export async function minimizeMainWindow() {
   if (!isTauri()) return;
-  await invoke("destroy_main_window");
+  await invoke("minimize_main_window");
 }
 
 export async function markMainWindowReady() {
@@ -137,6 +137,18 @@ export async function readImageAsset(path: string) {
     return new Uint8Array(await response.arrayBuffer());
   }
   const value = await invoke<ArrayBuffer>("read_image_asset", { path });
+  return new Uint8Array(value);
+}
+
+export async function fetchDroppedImage(url: string) {
+  if (!isTauri()) {
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Image request returned ${response.status}.`);
+    }
+    return new Uint8Array(await response.arrayBuffer());
+  }
+  const value = await invoke<ArrayBuffer>("fetch_dropped_image", { url });
   return new Uint8Array(value);
 }
 

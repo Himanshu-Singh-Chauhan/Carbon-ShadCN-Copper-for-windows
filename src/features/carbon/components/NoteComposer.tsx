@@ -6,15 +6,19 @@ import {
   FileEditIcon,
   InboxIcon,
 } from "@hugeicons/core-free-icons";
-import type {
-  ClipboardEvent,
-  KeyboardEvent,
-  RefObject,
+import {
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type RefObject,
 } from "react";
 import { AssetImage } from "../../../components/AssetImage";
 import { Icon } from "../../../components/ui/icon";
 import type { CarbonAttachment } from "../../../lib/model";
+import { cn } from "../../../lib/utils";
 import type { DraftImage } from "../types";
+import { requestsImageDrop, supportsDrop } from "../drop";
 
 export function NoteComposer({
   captureSectionName,
@@ -26,6 +30,7 @@ export function NoteComposer({
   saving,
   onCancelEditing,
   onDraftChange,
+  onDropImages,
   onOpenCommands,
   onOpenImage,
   onPaste,
@@ -42,6 +47,7 @@ export function NoteComposer({
   saving: boolean;
   onCancelEditing: () => void;
   onDraftChange: (value: string) => void;
+  onDropImages: (data: DataTransfer) => void;
   onOpenCommands: () => void;
   onOpenImage: (index: number) => void;
   onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -49,6 +55,7 @@ export function NoteComposer({
   onRemoveExistingImage: (id: string) => void;
   onSubmit: () => void;
 }) {
+  const [dropActive, setDropActive] = useState(false);
   const attachmentCount = existingAttachments.length + draftImages.length;
   const hasContent = editing || Boolean(draft.trim() || attachmentCount);
   const removeButtonStyles =
@@ -66,9 +73,81 @@ export function NoteComposer({
     }
   }
 
+  function handleDragEnter(event: DragEvent<HTMLElement>) {
+    if (!supportsDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    setDropActive(true);
+  }
+
+  function handleDragOver(event: DragEvent<HTMLElement>) {
+    if (!supportsDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDropActive(true);
+  }
+
+  function handleDragLeave(event: DragEvent<HTMLElement>) {
+    if (
+      event.relatedTarget instanceof Node &&
+      event.currentTarget.contains(event.relatedTarget)
+    ) {
+      return;
+    }
+    setDropActive(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLElement>) {
+    setDropActive(false);
+    if (requestsImageDrop(event.dataTransfer)) {
+      event.preventDefault();
+      event.stopPropagation();
+      onDropImages(event.dataTransfer);
+      return;
+    }
+
+    const droppedText =
+      event.dataTransfer.getData("text/plain") ||
+      event.dataTransfer
+        .getData("text/uri-list")
+        .split(/\r?\n/)
+        .find((line) => line.trim() && !line.trim().startsWith("#")) ||
+      "";
+    if (!droppedText) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? draft.length;
+    const end = input?.selectionEnd ?? start;
+    const nextDraft = `${draft.slice(0, start)}${droppedText}${draft.slice(end)}`;
+    const nextCaret = start + droppedText.length;
+    onDraftChange(nextDraft);
+    requestAnimationFrame(() => {
+      input?.focus();
+      input?.setSelectionRange(nextCaret, nextCaret);
+    });
+  }
+
   return (
-    <footer className="shrink-0 px-3 pb-3 pt-1">
-      <div className="overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-panel transition-[border-color,box-shadow] focus-within:border-accent/45 focus-within:shadow-float">
+    <footer
+      className="relative shrink-0 px-3 pb-3 pt-1"
+      data-composer-drop-zone
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {dropActive && (
+        <div className="pointer-events-none absolute -top-7 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap rounded-lg border border-accent/35 bg-surface-raised px-2.5 py-1.5 text-xs font-medium text-ink shadow-panel">
+          Drop into note
+        </div>
+      )}
+      <div
+        className={cn(
+          "overflow-hidden rounded-2xl border border-line bg-surface-raised shadow-panel transition-[border-color,box-shadow] focus-within:border-accent/45 focus-within:shadow-float",
+          dropActive && "border-accent/70 ring-2 ring-accent/20",
+        )}
+      >
         {editing && (
           <div className="flex items-center justify-between gap-3 border-b border-line bg-surface px-3 py-2">
             <span className="inline-flex min-w-0 items-center gap-1.5 text-xs font-semibold text-ink">

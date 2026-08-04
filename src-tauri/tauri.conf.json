@@ -27,7 +27,8 @@
         "transparent": true,
         "shadow": false,
         "alwaysOnTop": true,
-        "resizable": true
+        "resizable": true,
+        "dragDropEnabled": false
       },
       {
         "label": "capture-toast",

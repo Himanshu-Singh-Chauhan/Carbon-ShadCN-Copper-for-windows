@@ -10,6 +10,16 @@ const MAX_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
 const USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 \
      (KHTML, like Gecko) Chrome/124.0 Safari/537.36 CarbonLinkPreview/0.1";
 
+fn client() -> Result<Client, String> {
+    Client::builder()
+        .redirect(Policy::none())
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(12))
+        .user_agent(USER_AGENT)
+        .build()
+        .map_err(io_error)
+}
+
 fn image_format(mime_type: &str) -> Option<&'static str> {
     match mime_type {
         "image/jpeg" => Some("jpg"),
@@ -39,13 +49,7 @@ pub(super) fn load_preview(app: &AppHandle, raw_url: &str) -> Result<Option<Link
     }
 
     let result = (|| {
-        let client = Client::builder()
-            .redirect(Policy::none())
-            .connect_timeout(Duration::from_secs(5))
-            .timeout(Duration::from_secs(12))
-            .user_agent(USER_AGENT)
-            .build()
-            .map_err(io_error)?;
+        let client = client()?;
         let (page_url, _, html_bytes) = network::fetch(
             &client,
             url.clone(),
@@ -102,4 +106,17 @@ pub(super) fn load_preview(app: &AppHandle, raw_url: &str) -> Result<Option<Link
         let _ = cache::write_atomic(&failure_path, b"");
     }
     result
+}
+
+pub(super) fn load_dropped_image(raw_url: &str) -> Result<Vec<u8>, String> {
+    let url = Url::parse(raw_url).map_err(io_error)?;
+    let (_, _, bytes) = network::fetch(&client()?, url, "image/*", MAX_IMAGE_BYTES)?;
+    match image::guess_format(&bytes).map_err(io_error)? {
+        image::ImageFormat::Bmp
+        | image::ImageFormat::Gif
+        | image::ImageFormat::Jpeg
+        | image::ImageFormat::Png
+        | image::ImageFormat::WebP => Ok(bytes),
+        _ => Err("This image format is not supported.".to_string()),
+    }
 }

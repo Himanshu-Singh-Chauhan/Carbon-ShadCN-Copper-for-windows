@@ -38,6 +38,14 @@ pub fn read_link_preview_image(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+#[tauri::command]
+pub async fn fetch_dropped_image(url: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = tauri::async_runtime::spawn_blocking(move || service::load_dropped_image(&url))
+        .await
+        .map_err(io_error)??;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 pub fn copy_cache(source_data: &Path, destination_data: &Path) -> Result<(), String> {
     cache::copy_cache(source_data, destination_data)
 }

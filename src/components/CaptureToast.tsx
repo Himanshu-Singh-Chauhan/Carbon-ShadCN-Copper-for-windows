@@ -7,11 +7,9 @@ import {
 } from "@hugeicons/core-free-icons";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { CaptureNotificationPayload } from "../lib/native";
-import { moveCapturedItem } from "../lib/native";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,7 +45,10 @@ function SavedCaptureNotification({
   }, [dismissRevision, menuOpen, toastId]);
 
   async function selectBucket(nextBucketId: string) {
-    await moveCapturedItem(payload.itemId, nextBucketId);
+    await invoke("move_captured_item", {
+      itemId: payload.itemId,
+      bucketId: nextBucketId,
+    });
     setBucketId(nextBucketId);
     setDismissRevision((current) => current + 1);
   }
@@ -173,12 +174,16 @@ export function CaptureToast() {
     let unlisten: (() => void) | undefined;
 
     function completeNotification(notificationId: string) {
-      activeNotificationIds.current.delete(notificationId);
+      if (!activeNotificationIds.current.delete(notificationId)) return;
       setOpenMenuNotificationId((current) =>
         current === notificationId ? null : current,
       );
       if (activeNotificationIds.current.size === 0) {
-        window.setTimeout(() => void getCurrentWindow().hide(), 180);
+        window.setTimeout(() => {
+          if (activeNotificationIds.current.size === 0) {
+            void invoke("capture_notifications_idle");
+          }
+        }, 180);
       }
     }
 

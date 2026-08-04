@@ -7,6 +7,7 @@ pub(crate) const MAIN_WINDOW_LABEL: &str = "main";
 pub(crate) const CAPTURE_TOAST_WINDOW_LABEL: &str = "capture-toast";
 pub(crate) const IMAGE_VIEWER_WINDOW_LABEL: &str = "image-viewer";
 static MAIN_WINDOW_CREATION: Mutex<()> = Mutex::new(());
+static CAPTURE_TOAST_CREATION: Mutex<()> = Mutex::new(());
 static MAIN_WINDOW_LIFECYCLE: Mutex<MainWindowLifecycle> = Mutex::new(MainWindowLifecycle {
     ready: false,
     show_requested: false,
@@ -44,17 +45,30 @@ fn configured_window(app: &AppHandle, label: &str) -> Result<WebviewWindow, Stri
         .map_err(io_error)
 }
 
-pub(crate) fn create_initial_windows(app: &AppHandle) -> Result<(), String> {
-    if app.get_webview_window(CAPTURE_TOAST_WINDOW_LABEL).is_none() {
-        configured_window(app, CAPTURE_TOAST_WINDOW_LABEL)?;
-    }
+pub(crate) fn create_initial_windows(_app: &AppHandle) -> Result<(), String> {
     #[cfg(debug_assertions)]
     {
         MAIN_WINDOW_LIFECYCLE
             .lock()
             .map_err(io_error)?
             .show_requested = true;
-        ensure_main_window(app)?;
+        ensure_main_window(_app)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn ensure_capture_toast(app: &AppHandle) -> Result<WebviewWindow, String> {
+    let _creation = CAPTURE_TOAST_CREATION.lock().map_err(io_error)?;
+    if let Some(window) = app.get_webview_window(CAPTURE_TOAST_WINDOW_LABEL) {
+        return Ok(window);
+    }
+    configured_window(app, CAPTURE_TOAST_WINDOW_LABEL)
+}
+
+pub(crate) fn destroy_capture_toast(app: &AppHandle) -> Result<(), String> {
+    let _creation = CAPTURE_TOAST_CREATION.lock().map_err(io_error)?;
+    if let Some(window) = app.get_webview_window(CAPTURE_TOAST_WINDOW_LABEL) {
+        window.destroy().map_err(io_error)?;
     }
     Ok(())
 }
@@ -112,14 +126,29 @@ pub(crate) fn request_show_main_window(app: &AppHandle) {
     });
 }
 
-pub(crate) fn destroy_main_window(app: &AppHandle) -> Result<(), String> {
-    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-        window.destroy().map_err(io_error)?;
+pub(crate) fn minimize_main_window(app: &AppHandle) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    {
+        MAIN_WINDOW_LIFECYCLE
+            .lock()
+            .map_err(io_error)?
+            .show_requested = false;
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            window.hide().map_err(io_error)?;
+        }
+        return Ok(());
     }
-    let mut lifecycle = MAIN_WINDOW_LIFECYCLE.lock().map_err(io_error)?;
-    lifecycle.ready = false;
-    lifecycle.show_requested = false;
-    Ok(())
+
+    #[cfg(not(debug_assertions))]
+    {
+        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+            window.destroy().map_err(io_error)?;
+        }
+        let mut lifecycle = MAIN_WINDOW_LIFECYCLE.lock().map_err(io_error)?;
+        lifecycle.ready = false;
+        lifecycle.show_requested = false;
+        Ok(())
+    }
 }
 
 pub(crate) fn ensure_image_viewer(app: &AppHandle) -> Result<WebviewWindow, String> {
