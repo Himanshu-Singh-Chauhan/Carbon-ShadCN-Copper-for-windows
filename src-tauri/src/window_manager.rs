@@ -127,28 +127,14 @@ pub(crate) fn request_show_main_window(app: &AppHandle) {
 }
 
 pub(crate) fn minimize_main_window(app: &AppHandle) -> Result<(), String> {
-    #[cfg(debug_assertions)]
-    {
-        MAIN_WINDOW_LIFECYCLE
-            .lock()
-            .map_err(io_error)?
-            .show_requested = false;
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            window.hide().map_err(io_error)?;
-        }
-        return Ok(());
+    MAIN_WINDOW_LIFECYCLE
+        .lock()
+        .map_err(io_error)?
+        .show_requested = false;
+    if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
+        window.hide().map_err(io_error)?;
     }
-
-    #[cfg(not(debug_assertions))]
-    {
-        if let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) {
-            window.destroy().map_err(io_error)?;
-        }
-        let mut lifecycle = MAIN_WINDOW_LIFECYCLE.lock().map_err(io_error)?;
-        lifecycle.ready = false;
-        lifecycle.show_requested = false;
-        Ok(())
-    }
+    Ok(())
 }
 
 pub(crate) fn ensure_image_viewer(app: &AppHandle) -> Result<WebviewWindow, String> {
